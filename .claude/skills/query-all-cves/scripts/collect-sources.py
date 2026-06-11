@@ -9,6 +9,7 @@ Popen are stdout-only, making 2>&1 corruption impossible from this path.
 Usage:
   python3 collect-sources.py [--since YYYY-MM-DD]
                               [--server-tag TAG] [--ui-tag TAG]
+                              [--skip-gmail]
 
   --since         Earliest date to fetch (default: 90 days ago). Applied to
                   Gmail and JIRA queries.
@@ -16,6 +17,9 @@ Usage:
                   Catalog (default: latest published tag).
   --ui-tag        Image tag to query for discovery-ui in the Red Hat Catalog
                   (default: latest published tag).
+  --skip-gmail    Skip the Gmail/Prograde query entirely. Writes an empty
+                  prograde-emails.json so downstream steps run unchanged.
+                  Use when Prograde emails are unavailable or unwanted.
 
   When --server-tag or --ui-tag are provided, the catalog is queried once per
   container and the results are merged into cve-data/catalog.json.
@@ -32,6 +36,7 @@ parser = argparse.ArgumentParser(add_help=False)
 parser.add_argument("--since", default=None)
 parser.add_argument("--server-tag", default=None)
 parser.add_argument("--ui-tag", default=None)
+parser.add_argument("--skip-gmail", action="store_true", default=False)
 args = parser.parse_args()
 
 since = args.since or (datetime.date.today() - datetime.timedelta(days=90)).isoformat()
@@ -72,15 +77,25 @@ def collect_catalog():
     json.dump(combined, open("cve-data/catalog.json", "w"), indent=2)
     return True
 
-# Parallel jobs for gmail and jira
-parallel_jobs = [
-    ("gmail", ["uv", "run", f"{skills}/query-gmail/scripts/query-gmail.py",
-               "--label", "alerts/prograde", "--since", since],
-     "cve-data/prograde-emails.json"),
-    ("jira",  ["uv", "run", f"{skills}/query-jira-cves/scripts/query-jira-cves.py",
-               "--summary-contains", "CVE"],
-     "cve-data/jira.json"),
-]
+# Parallel jobs for gmail (optional) and jira
+if args.skip_gmail:
+    print("  Skipping Gmail/Prograde (--skip-gmail set).", flush=True)
+    with open("cve-data/prograde-emails.json", "w") as f:
+        json.dump({"messages": []}, f)
+    parallel_jobs = [
+        ("jira", ["uv", "run", f"{skills}/query-jira-cves/scripts/query-jira-cves.py",
+                  "--summary-contains", "CVE"],
+         "cve-data/jira.json"),
+    ]
+else:
+    parallel_jobs = [
+        ("gmail", ["uv", "run", f"{skills}/query-gmail/scripts/query-gmail.py",
+                   "--label", "alerts/prograde", "--since", since],
+         "cve-data/prograde-emails.json"),
+        ("jira",  ["uv", "run", f"{skills}/query-jira-cves/scripts/query-jira-cves.py",
+                   "--summary-contains", "CVE"],
+         "cve-data/jira.json"),
+    ]
 
 print("Phase 1: collecting from all sources...", flush=True)
 t0 = time.time()

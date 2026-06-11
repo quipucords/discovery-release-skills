@@ -43,10 +43,16 @@ job syntax. This keeps each command simple and avoids approval prompts.
 Before running anything, ask the user the following two questions. Use their
 answers to build the arguments for `collect-sources.py` in Phase 1.
 
-**Question 1 — Date range:**
-How far back should data be queried? This applies to Gmail (Prograde emails)
-and JIRA. The default is 90 days ago. If the user specifies a date, pass it
-as `--since YYYY-MM-DD` to `collect-sources.py`.
+**Question 1 — Prograde emails and date range:**
+Ask the user whether to include Prograde advisory emails from Gmail. Not all
+users receive these emails or have Gmail configured. If they do, also ask how
+far back to query. Pass `--skip-gmail` to `collect-sources.py` if skipping;
+pass `--since YYYY-MM-DD` if a custom date is given (default is 90 days ago).
+
+Options to present:
+- **Last 90 days (default)** — query Gmail for Prograde emails from the last 90 days
+- **Custom date** — query Gmail from a specific date (ask for the date)
+- **Skip Prograde emails** — omit Gmail entirely; use `--skip-gmail` flag
 
 **Question 2 — Red Hat Catalog image tags:**
 The catalog query defaults to the latest published tag for both
