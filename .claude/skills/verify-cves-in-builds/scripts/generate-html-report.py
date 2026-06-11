@@ -324,6 +324,9 @@ def make_rows(cves, images):
         affected = cve.get("affected_containers", [])
 
         for container in images:
+            if container not in affected:
+                continue   # CVE doesn't affect this container — no row needed
+
             entry         = checked.get(container, {})
             is_fixed      = entry.get("is_fixed")
             pkg_found     = entry.get("package_found", False)
@@ -331,9 +334,7 @@ def make_rows(cves, images):
             installed     = entry.get("installed_nvras", [])
             minimum_fixed = entry.get("minimum_fixed_nvr") or ""
 
-            if container not in affected:
-                status_key, status_label = "na", "N/A"
-            elif is_fixed is True:
+            if is_fixed is True:
                 status_key, status_label = "fixed", "Fixed"
             elif is_fixed is False:
                 status_key, status_label = "not-fixed", "Not Fixed"
@@ -520,7 +521,6 @@ html = f"""<!DOCTYPE html>
       <option value="no-package-data">UNKNOWN (no RPM data)</option>
       <option value="not-found">Not Found</option>
       <option value="fix-unknown">Fix Unknown</option>
-      <option value="na">N/A</option>
     </select>
     <label for="f-severity">Severity</label>
     <select id="f-severity" onchange="applyFilters()">
