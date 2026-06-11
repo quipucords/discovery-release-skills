@@ -272,6 +272,11 @@ def query_advisory_builds(advisory_id: str) -> dict:
                                 if len(nvr_parts) == 3:
                                     name, version, release = nvr_parts
 
+                        if nevr and not (name and version and release):
+                            log(f"WARNING: NEVR parsing incomplete for '{nevr}' "
+                                f"(name={name!r}, version={version!r}, release={release!r}). "
+                                f"NVR field will be present but components may be empty.")
+
                         builds_list.append({
                             "nvr": nvr,
                             "name": name,
