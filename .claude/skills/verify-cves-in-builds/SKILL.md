@@ -67,8 +67,41 @@ If the user selects **Defaults**, use:
 - `--server-image quay.io/quipucords/quipucords:latest`
 - `--ui-image quay.io/quipucords/quipucords-ui:latest`
 
-If the user selects **Specific tag**, ask a follow-up `AskUserQuestion` for each
-image's tag separately, then construct the full image URLs.
+If the user selects **Specific tag**, present a single follow-up `AskUserQuestion`
+with two questions — one per container. Do not hardcode version numbers; tags change
+with every release. Use "Other" (automatically added) as the primary input path,
+with only "latest" as a named convenience option.
+
+```
+AskUserQuestion({
+  "questions": [
+    {
+      "question": "What tag or image should be used for discovery-server?",
+      "header": "Server image",
+      "multiSelect": false,
+      "options": [
+        {"label": "latest", "description": "quay.io/quipucords/quipucords:latest"},
+        {"label": "Custom",  "description": "Type a specific tag (e.g. 2.5.1), digest, or full image URL in the Other field"}
+      ]
+    },
+    {
+      "question": "What tag or image should be used for discovery-ui?",
+      "header": "UI image",
+      "multiSelect": false,
+      "options": [
+        {"label": "latest", "description": "quay.io/quipucords/quipucords-ui:latest"},
+        {"label": "Custom",  "description": "Type a specific tag (e.g. 2.5.1), digest, or full image URL in the Other field"}
+      ]
+    }
+  ]
+})
+```
+
+If the user selects "latest", use the default image for that container. If the user
+types a value via "Other":
+- If it looks like a full image URL (contains `/` or `:`), use it as-is
+- Otherwise treat it as a tag and append it to the default base image
+  (e.g. `2.5.1` → `quay.io/quipucords/quipucords:2.5.1`)
 
 If the user selects **Downstream**, use:
 - `--server-image registry.redhat.io/discovery/discovery-server-rhel9:latest`
