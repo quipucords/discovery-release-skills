@@ -38,6 +38,25 @@ All complex operations are encapsulated in helper scripts under
 `python3 script.py` call — no inline Python, no shell wildcards, no background
 job syntax. This keeps each command simple and avoids approval prompts.
 
+### Step 0 — Gather options from the user
+
+Before running anything, ask the user the following two questions. Use their
+answers to build the arguments for `collect-sources.py` in Phase 1.
+
+**Question 1 — Date range:**
+How far back should data be queried? This applies to Gmail (Prograde emails)
+and JIRA. The default is 90 days ago. If the user specifies a date, pass it
+as `--since YYYY-MM-DD` to `collect-sources.py`.
+
+**Question 2 — Red Hat Catalog image tags:**
+The catalog query defaults to the latest published tag for both
+`discovery-server` and `discovery-ui`. Ask whether the user wants to query
+specific tags instead. If yes, ask for the tag for each container separately
+(they may differ). Pass non-default tags as `--server-tag TAG` and/or
+`--ui-tag TAG` to `collect-sources.py`.
+
+Once you have the answers, proceed with Step 0.
+
 ### Step 0 — Navigate to project root and validate prerequisites
 
 ```bash
@@ -72,9 +91,18 @@ Runs catalog, Gmail, and JIRA queries concurrently via `subprocess.Popen`.
 Stdout is redirected to data files inside the script — stderr always goes to
 the terminal. The `2>&1` corruption risk is eliminated.
 
+Pass the options gathered in Step 0. Omit any flag whose value is the default:
+
 ```bash
-python3 .claude/skills/query-all-cves/scripts/collect-sources.py
+python3 .claude/skills/query-all-cves/scripts/collect-sources.py \
+  [--since YYYY-MM-DD] \
+  [--server-tag TAG] \
+  [--ui-tag TAG]
 ```
+
+When `--server-tag` or `--ui-tag` are provided, the catalog is queried once
+per container and results are merged automatically before the parallel Gmail
+and JIRA queries run.
 
 ### Step — Validate Phase 1 outputs
 
