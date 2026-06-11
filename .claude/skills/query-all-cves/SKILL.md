@@ -33,15 +33,12 @@ Combined prerequisites of all sub-skills:
 
 ## Orchestration
 
-> **Important — stdout/stderr separation:** All scripts in this pipeline write JSON
-> exclusively to stdout and progress logs to stderr. **Never redirect stderr into a
-> data file** (never use `2>&1` when writing to `.json` files). Doing so produces
-> invalid JSON that will silently corrupt downstream steps.
+All complex operations are encapsulated in helper scripts under
+`.claude/skills/query-all-cves/scripts/`. Each step below is a single
+`python3 script.py` call — no inline Python, no shell wildcards, no background
+job syntax. This keeps each command simple and avoids approval prompts.
 
-### Step 0 — Validate prerequisites
-
-Run these checks first, before any data collection. If any check fails, stop and
-resolve the issue before continuing — otherwise Phase 1 work may be wasted.
+### Step 0 — Navigate to project root and validate prerequisites
 
 ```bash
 root=$(git rev-parse --show-toplevel 2>/dev/null)
@@ -54,105 +51,75 @@ if [ -z "$root" ]; then
 fi
 [ -n "$root" ] && cd "$root" || { echo "Error: cannot find project root"; exit 1; }
 mkdir -p cve-data
-
-# Clear stale errata files from previous runs. The primary source files
-# (catalog.json, prograde-*.json, jira.json) are overwritten by each run,
-# but errata-*.json files accumulate by advisory ID. Without this cleanup,
-# advisories no longer present in the current catalog or prograde output
-# would still be included in the merge, silently polluting the report.
-rm -f cve-data/errata-*.json cve-data/advisory-ids.txt
-
-# Check Kerberos ticket (required for query-errata-advisory in Phase 2)
-klist -s && echo "Kerberos ticket valid" || { echo "Error: no valid Kerberos ticket. Run: kinit --keychain -V <username>@YOUR_KERBEROS_REALM"; exit 1; }
-
-# Check JIRA credentials (required for query-jira-cves in Phase 1)
-[ -n "$JIRA_EMAIL" ] && [ -n "$JIRA_API_TOKEN" ] || { echo "Error: JIRA_EMAIL and JIRA_API_TOKEN must be set. See project README."; exit 1; }
 ```
 
-### Phase 1 — Collect from all sources (run in parallel)
-
-Run all three source queries concurrently. Use background shell jobs (`&`) and `wait`
-to parallelize. Redirect **only stdout** to each data file — do not use `2>&1`.
+Then check credentials before doing any work — a missing Kerberos ticket or JIRA
+token will fail in Phase 2 after all of Phase 1 has already run:
 
 ```bash
-SINCE=$(python3 -c "import datetime; print((datetime.date.today() - datetime.timedelta(days=90)).isoformat())")
-
-uv run .claude/skills/query-redhat-catalog/scripts/query-redhat-catalog.py \
-  > cve-data/catalog.json &
-PID_CATALOG=$!
-
-uv run .claude/skills/query-gmail/scripts/query-gmail.py \
-  --label "alerts/prograde" --since "$SINCE" \
-  > cve-data/prograde-emails.json &
-PID_GMAIL=$!
-
-uv run .claude/skills/query-jira-cves/scripts/query-jira-cves.py \
-  --summary-contains "CVE" \
-  > cve-data/jira.json &
-PID_JIRA=$!
-
-wait $PID_CATALOG $PID_GMAIL $PID_JIRA
+klist -s || { echo "Error: no valid Kerberos ticket. Run: kinit --keychain -V <username>@YOUR_KERBEROS_REALM"; exit 1; }
+[ -n "$JIRA_EMAIL" ] && [ -n "$JIRA_API_TOKEN" ] || { echo "Error: JIRA_EMAIL and JIRA_API_TOKEN not set — see project README"; exit 1; }
 ```
 
-After `wait`, validate that each output file is non-empty and contains valid JSON before
-continuing — a corrupted file will silently produce wrong results at merge time:
+### Step 1 — Clean stale errata files
 
 ```bash
-for f in cve-data/catalog.json cve-data/prograde-emails.json cve-data/jira.json; do
-  python3 -c "import json,sys; json.load(open('$f'))" \
-    && echo "$f OK" \
-    || { echo "Error: $f is not valid JSON — do not use 2>&1 when redirecting output"; exit 1; }
-done
+python3 .claude/skills/query-all-cves/scripts/clean-cve-data.py
 ```
 
-Then parse the Prograde emails:
+### Phase 1 — Collect from all sources in parallel
+
+Runs catalog, Gmail, and JIRA queries concurrently via `subprocess.Popen`.
+Stdout is redirected to data files inside the script — stderr always goes to
+the terminal. The `2>&1` corruption risk is eliminated.
 
 ```bash
-uv run .claude/skills/parse-prograde-advisories/scripts/parse-prograde-advisories.py \
-  cve-data/prograde-emails.json > cve-data/prograde-advisories.json
+python3 .claude/skills/query-all-cves/scripts/collect-sources.py
 ```
 
-### Phase 2 — Enrich with errata (run in parallel)
+### Step — Validate Phase 1 outputs
 
-Extract all unique advisory IDs from both catalog and prograde sources. Note that the
-two sources use different ID formats — catalog uses RHSA-format (e.g. `RHSA-2026:12441`)
-and prograde uses numeric IDs (e.g. `165721`). Both formats are accepted by
-`query-errata-advisory`. Deduplicate before querying to avoid redundant API calls.
+Catches JSON corruption before any downstream work is wasted:
 
 ```bash
-{ jq -r '.cves[].advisory_id | select(.)' cve-data/catalog.json
-  jq -r '.advisories[].advisory_id | select(.)' cve-data/prograde-advisories.json
-} | sort -u > cve-data/advisory-ids.txt
-
-echo "Querying $(wc -l < cve-data/advisory-ids.txt) unique advisory IDs..."
-
-while IFS= read -r id; do
-  safe="${id//[^a-zA-Z0-9]/-}"
-  uv run .claude/skills/query-errata-advisory/scripts/query-errata-advisory.py "$id" \
-    > "cve-data/errata-${safe}.json" &
-done < cve-data/advisory-ids.txt
-wait
+python3 .claude/skills/query-all-cves/scripts/validate-json-files.py \
+  cve-data/catalog.json cve-data/prograde-emails.json cve-data/jira.json
 ```
 
-### Phase 3 — Merge
+### Step — Parse Prograde emails
 
 ```bash
-uv run .claude/skills/merge-cve-data/scripts/merge-cve-data.py \
-  --catalog cve-data/catalog.json \
-  --prograde cve-data/prograde-advisories.json \
-  --errata cve-data/errata-*.json \
-  --jira cve-data/jira.json \
-  > cve-data/unified-cves.json
+python3 .claude/skills/query-all-cves/scripts/parse-prograde.py
+```
 
-echo "Done. Summary:"
-python3 -c "
-import json
-d = json.load(open('cve-data/unified-cves.json'))
-s = d['summary']
-print(f\"  Total CVEs: {s['total_cves']}\")
-print(f\"  Fix available: {s['fix_available']}\")
-print(f\"  Sources: {', '.join(s['sources_used'])}\")
-"
+### Step — Extract and deduplicate advisory IDs
+
+Reads both catalog and prograde sources; deduplicates across their different
+ID formats (RHSA-format vs numeric); writes `cve-data/advisory-ids.txt`:
+
+```bash
+python3 .claude/skills/query-all-cves/scripts/extract-advisory-ids.py
+```
+
+### Phase 2 — Query all errata in parallel
+
+```bash
+python3 .claude/skills/query-all-cves/scripts/query-all-errata.py
+```
+
+### Phase 3 — Merge all sources
+
+Resolves `cve-data/errata-*.json` via Python glob internally — no shell
+wildcard expansion needed:
+
+```bash
+python3 .claude/skills/query-all-cves/scripts/run-merge.py
+```
+
+### Step — Print summary
+
+```bash
+python3 .claude/skills/query-all-cves/scripts/print-summary.py
 ```
 
 ## Dependency graph
