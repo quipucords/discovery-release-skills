@@ -29,14 +29,16 @@ A new upstream release will not appear here until it is published downstream.
 ## Invocation
 
 ```bash
+mkdir -p cve-data
+
 # Query both containers (default)
-uv run .claude/skills/query-redhat-catalog/scripts/query-redhat-catalog.py > catalog.json
+uv run .claude/skills/query-redhat-catalog/scripts/query-redhat-catalog.py > cve-data/catalog.json
 
 # Query only the server container
-uv run .claude/skills/query-redhat-catalog/scripts/query-redhat-catalog.py --container discovery-server > catalog.json
+uv run .claude/skills/query-redhat-catalog/scripts/query-redhat-catalog.py --container discovery-server > cve-data/catalog.json
 
 # Query a specific published version tag
-uv run .claude/skills/query-redhat-catalog/scripts/query-redhat-catalog.py --tag 2.5.1 > catalog.json
+uv run .claude/skills/query-redhat-catalog/scripts/query-redhat-catalog.py --tag 2.5.1 > cve-data/catalog.json
 
 # See all options
 uv run .claude/skills/query-redhat-catalog/scripts/query-redhat-catalog.py --help
@@ -55,13 +57,6 @@ JSON to stdout: `{"total": N, "cves": [{...}, ...]}` where each CVE contains:
 query-redhat-catalog → query-errata-advisory (per advisory_id) → merge-cve-data
 ```
 
-Batch-query errata for all advisories found in catalog output:
-
-```bash
-uv run .claude/skills/query-redhat-catalog/scripts/query-redhat-catalog.py > catalog.json
-
-jq -r '.cves[].advisory_id | select(.)' catalog.json | sort -u | while read id; do
-  safe="${id//[^a-zA-Z0-9]/-}"
-  uv run .claude/skills/query-errata-advisory/scripts/query-errata-advisory.py "$id" > "errata-${safe}.json"
-done
-```
+This skill is a data source. Its output `advisory_id` fields are passed to the
+`query-errata-advisory` skill (once per unique ID) to retrieve fixed package NVRs.
+The full pipeline is orchestrated by the `merge-cve-data` skill.

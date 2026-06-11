@@ -37,16 +37,18 @@ klist -s && echo "ticket valid" || echo "need to kinit"
 ## Invocation
 
 ```bash
+mkdir -p cve-data
+
 # Query by numeric ID (from prograde)
-uv run .claude/skills/query-errata-advisory/scripts/query-errata-advisory.py 165721 > errata-165721.json
+uv run .claude/skills/query-errata-advisory/scripts/query-errata-advisory.py 165721 > cve-data/errata-165721.json
 
 # Query by RHSA designation (from catalog)
-uv run .claude/skills/query-errata-advisory/scripts/query-errata-advisory.py "RHSA-2026:12441" > errata-RHSA-2026-12441.json
+uv run .claude/skills/query-errata-advisory/scripts/query-errata-advisory.py "RHSA-2026:12441" > cve-data/errata-RHSA-2026-12441.json
 
 # Batch: query all advisory IDs from catalog output
-jq -r '.cves[].advisory_id | select(.)' catalog.json | sort -u | while read id; do
+jq -r '.cves[].advisory_id | select(.)' cve-data/catalog.json | sort -u | while read id; do
   safe="${id//[^a-zA-Z0-9]/-}"
-  uv run .claude/skills/query-errata-advisory/scripts/query-errata-advisory.py "$id" > "errata-${safe}.json"
+  uv run .claude/skills/query-errata-advisory/scripts/query-errata-advisory.py "$id" > "cve-data/errata-${safe}.json"
 done
 
 # See all options
@@ -65,12 +67,6 @@ JSON to stdout (one object per invocation):
 
 ## Pipeline
 
-One errata output file per advisory. Pass all of them together to `merge-cve-data`:
-
-```bash
-uv run .claude/skills/merge-cve-data/scripts/merge-cve-data.py \
-  --catalog catalog.json \
-  --prograde prograde-advisories.json \
-  --errata errata-*.json \
-  --jira jira.json
-```
+This skill is a data source. Each invocation produces one `errata-<id>.json` file.
+Once all advisory IDs have been queried, all errata files are consumed together by
+the `merge-cve-data` skill, which orchestrates the full pipeline.

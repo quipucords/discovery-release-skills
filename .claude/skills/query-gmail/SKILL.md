@@ -30,11 +30,13 @@ Also useful for any ad-hoc Gmail query during release preparation.
 ## Invocation
 
 ```bash
+mkdir -p cve-data
+
 # Fetch Prograde emails since a given date and save for downstream processing
 uv run .claude/skills/query-gmail/scripts/query-gmail.py \
   --label "alerts/prograde" \
   --since "2026-05-01" \
-  > prograde-emails.json
+  > cve-data/prograde-emails.json
 
 # See all options
 uv run .claude/skills/query-gmail/scripts/query-gmail.py --help
@@ -56,9 +58,5 @@ query-redhat-catalog ───────────────────�
 query-jira-cves ───────────────────────────────────────────────────┘
 ```
 
-Pass this skill's output directly to `parse-prograde-advisories`:
-
-```bash
-uv run .claude/skills/query-gmail/scripts/query-gmail.py --label "alerts/prograde" --since "2026-05-01" \
-  | uv run .claude/skills/parse-prograde-advisories/scripts/parse-prograde-advisories.py
-```
+This skill is a data source. Pass its output to the `parse-prograde-advisories` skill
+as the next step. The full pipeline is orchestrated by the `merge-cve-data` skill.

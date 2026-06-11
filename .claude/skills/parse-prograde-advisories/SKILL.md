@@ -21,19 +21,18 @@ retrieves the actual CVE IDs and fixed package NVRs for each advisory.
 ## Invocation
 
 ```bash
-# From stdin (piped from query-gmail)
-uv run .claude/skills/query-gmail/scripts/query-gmail.py --label "alerts/prograde" --since "2026-05-01" \
-  | uv run .claude/skills/parse-prograde-advisories/scripts/parse-prograde-advisories.py > prograde-advisories.json
-
-# From a saved file
-uv run .claude/skills/parse-prograde-advisories/scripts/parse-prograde-advisories.py prograde-emails.json > prograde-advisories.json
+# From a saved file (output of query-gmail skill)
+uv run .claude/skills/parse-prograde-advisories/scripts/parse-prograde-advisories.py cve-data/prograde-emails.json > cve-data/prograde-advisories.json
 
 # Explicitly from stdin
-cat prograde-emails.json | uv run .claude/skills/parse-prograde-advisories/scripts/parse-prograde-advisories.py -
+cat cve-data/prograde-emails.json | uv run .claude/skills/parse-prograde-advisories/scripts/parse-prograde-advisories.py - > cve-data/prograde-advisories.json
 
 # See all options
 uv run .claude/skills/parse-prograde-advisories/scripts/parse-prograde-advisories.py --help
 ```
+
+When invoking as part of the pipeline, first invoke the `query-gmail` skill and save
+its output, then pass that file to this skill.
 
 ## Output
 
@@ -50,10 +49,6 @@ designation. Pass it to `query-errata-advisory` to get CVE IDs and fixed package
 query-gmail → parse-prograde-advisories → query-errata-advisory → merge-cve-data
 ```
 
-Extract advisory IDs for the next step:
-
-```bash
-jq -r '.advisories[].advisory_id' prograde-advisories.json | sort -u | while read id; do
-  uv run .claude/skills/query-errata-advisory/scripts/query-errata-advisory.py "$id" > "errata-${id}.json"
-done
-```
+This skill is a data source. Its output `advisory_id` fields are passed to the
+`query-errata-advisory` skill (once per unique ID) to retrieve CVE IDs and fixed
+package NVRs. The full pipeline is orchestrated by the `merge-cve-data` skill.

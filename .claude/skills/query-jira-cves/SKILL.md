@@ -24,22 +24,23 @@ CVEs need attention before an upcoming release.
 
 ## Prerequisites
 
-```bash
-export JIRA_EMAIL="you@redhat.com"
-export JIRA_API_TOKEN="your-api-token"   # from id.atlassian.com
-```
+`JIRA_EMAIL` and `JIRA_API_TOKEN` must be set in your environment. Set them via the
+`env` block in `~/.claude/settings.json` or `.claude/settings.local.json` — see the
+project README for details.
 
 ## Invocation
 
 ```bash
+mkdir -p cve-data
+
 # Search for open CVE issues (default: excludes Done/Closed, last 90 days)
-uv run .claude/skills/query-jira-cves/scripts/query-jira-cves.py --summary-contains "CVE" > jira.json
+uv run .claude/skills/query-jira-cves/scripts/query-jira-cves.py --summary-contains "CVE" > cve-data/jira.json
 
 # Include closed issues (wider view)
-uv run .claude/skills/query-jira-cves/scripts/query-jira-cves.py --summary-contains "CVE" --no-status-filter > jira.json
+uv run .claude/skills/query-jira-cves/scripts/query-jira-cves.py --summary-contains "CVE" --no-status-filter > cve-data/jira.json
 
 # Extend the date window
-uv run .claude/skills/query-jira-cves/scripts/query-jira-cves.py --summary-contains "CVE" --since 2025-12-01 > jira.json
+uv run .claude/skills/query-jira-cves/scripts/query-jira-cves.py --summary-contains "CVE" --since 2025-12-01 > cve-data/jira.json
 
 # See all options
 uv run .claude/skills/query-jira-cves/scripts/query-jira-cves.py --help
@@ -57,16 +58,6 @@ not the fixed version. Use `query-errata-advisory` to find fixed NVRs.
 
 ## Pipeline
 
-```
-query-jira-cves → merge-cve-data
-```
-
-JIRA is typically the last source collected before merging:
-
-```bash
-uv run .claude/skills/merge-cve-data/scripts/merge-cve-data.py \
-  --catalog catalog.json \
-  --prograde prograde-advisories.json \
-  --errata errata-*.json \
-  --jira jira.json
-```
+This skill is a data source. Its output (`jira.json`) is consumed by the
+`merge-cve-data` skill, which orchestrates the full pipeline. Invoke
+`merge-cve-data` when you are ready to produce a unified CVE report.
