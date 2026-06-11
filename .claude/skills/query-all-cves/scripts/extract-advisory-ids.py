@@ -13,8 +13,10 @@ import json
 import sys
 
 try:
-    catalog = json.load(open("cve-data/catalog.json"))
-    prograde = json.load(open("cve-data/prograde-advisories.json"))
+    with open("cve-data/catalog.json") as f:
+        catalog = json.load(f)
+    with open("cve-data/prograde-advisories.json") as f:
+        prograde = json.load(f)
 except FileNotFoundError as e:
     print(f"Error: {e}", file=sys.stderr)
     sys.exit(1)
@@ -28,7 +30,7 @@ for advisory in prograde.get("advisories", []):
         ids.add(str(advisory["advisory_id"]))
 
 with open("cve-data/advisory-ids.txt", "w") as f:
-    for id in sorted(ids):
-        f.write(id + "\n")
+    for advisory_id in sorted(ids):
+        f.write(advisory_id + "\n")
 
-print(f"Extracted {len(ids)} unique advisory IDs → cve-data/advisory-ids.txt")
+print(f"Extracted {len(ids)} unique advisory IDs → cve-data/advisory-ids.txt", file=sys.stderr)

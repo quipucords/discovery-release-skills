@@ -10,14 +10,15 @@ import sys
 import time
 
 try:
-    ids = [line.strip() for line in open("cve-data/advisory-ids.txt") if line.strip()]
+    with open("cve-data/advisory-ids.txt") as f:
+        ids = [line.strip() for line in f if line.strip()]
 except FileNotFoundError:
     print("Error: cve-data/advisory-ids.txt not found. Run extract-advisory-ids.py first.",
           file=sys.stderr)
     sys.exit(1)
 
 if not ids:
-    print("No advisory IDs to query.")
+    print("No advisory IDs to query.", file=sys.stderr)
     sys.exit(0)
 
 print(f"Phase 2: querying {len(ids)} advisory IDs in parallel...", flush=True)
@@ -25,20 +26,22 @@ t0 = time.time()
 
 script = ".claude/skills/query-errata-advisory/scripts/query-errata-advisory.py"
 
+# File handles are opened here and kept open for the duration of each Popen
+# subprocess — this is intentional. They are closed explicitly in the wait loop.
 handles = []
 procs = []
-for id in ids:
-    safe = "".join(c if c.isalnum() else "-" for c in id)
-    fh = open(f"cve-data/errata-{safe}.json", "w")
+for advisory_id in ids:
+    safe = "".join(c if c.isalnum() else "-" for c in advisory_id)
+    fh = open(f"cve-data/errata-{safe}.json", "w")  # noqa: WPS515 (Popen pattern)
     handles.append(fh)
-    procs.append((id, subprocess.Popen(["uv", "run", script, id], stdout=fh)))
+    procs.append((advisory_id, subprocess.Popen(["uv", "run", script, advisory_id], stdout=fh)))
 
 failed = []
-for fh, (id, proc) in zip(handles, procs):
+for fh, (advisory_id, proc) in zip(handles, procs):
     rc = proc.wait()
     fh.close()
     if rc != 0:
-        failed.append(id)
+        failed.append(advisory_id)
 
 if failed:
     print(f"Warning: {len(failed)} errata queries failed: {', '.join(failed)}", file=sys.stderr)

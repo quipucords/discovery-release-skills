@@ -10,7 +10,8 @@ import sys
 SEVERITY_ORDER = {"Critical": 4, "Important": 3, "Moderate": 2, "Low": 1, "Unknown": 0}
 
 try:
-    data = json.load(open("cve-data/verified-cves.json"))
+    with open("cve-data/verified-cves.json") as f:
+        data = json.load(f)
 except FileNotFoundError:
     print("Error: cve-data/verified-cves.json not found. Run check-cves-in-rpms.py first.",
           file=sys.stderr)

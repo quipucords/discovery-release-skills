@@ -17,8 +17,10 @@ All progress messages go to stderr. This script produces no stdout output
 import json
 import re
 import sys
+import time
 from datetime import datetime, timezone
 
+# These constants must match the values in pull-and-query-rpms.py.
 SERVER_CONTAINER = "discovery/discovery-server-rhel9"
 UI_CONTAINER     = "discovery/discovery-ui-rhel9"
 
@@ -301,7 +303,6 @@ def check_cve_in_container(cve: dict, container: str) -> dict:
 
 
 log(f"\nChecking {len(unified['cves'])} CVEs against container RPM lists...")
-import time
 t0 = time.time()
 
 enriched_cves = []

@@ -45,21 +45,6 @@ def check_kerberos_ticket() -> bool:
         return False
 
 
-def extract_advisory_id(input_id: str) -> str:
-    """
-    Pass through advisory ID without modification.
-
-    The Errata API accepts multiple formats:
-    - '165765' -> numeric ID
-    - 'RHSA-165765' -> simple RHSA designation
-    - 'RHSA-2026:6923' -> full RHSA designation with year
-
-    All formats work directly with the API endpoint, so no extraction/transformation needed.
-    This function exists to document the accepted formats and maintain consistency with
-    the MCP server implementation.
-    """
-    return input_id.strip()
-
 
 def query_advisory(advisory_id: str) -> dict:
     """
@@ -456,7 +441,7 @@ NOTE:
         log("")
 
     # Normalize advisory ID
-    advisory_id = extract_advisory_id(args.advisory_id)
+    advisory_id = args.advisory_id.strip()
 
     # Query advisory details
     advisory_data = query_advisory(advisory_id)

@@ -20,6 +20,7 @@ import subprocess
 import sys
 import time
 
+# These constants must match the values in check-cves-in-rpms.py.
 SERVER_CONTAINER = "discovery/discovery-server-rhel9"
 UI_CONTAINER = "discovery/discovery-ui-rhel9"
 
@@ -110,41 +111,39 @@ for c in images:
 log(f"All images pulled in {time.time() - t0:.1f}s.")
 pulled_images = list(images.values())
 
+try:
+    # ── Phase 2: Query RPMs from both containers in parallel ──────────────────
+    log("\nQuerying installed RPMs in parallel...")
+    t1 = time.time()
 
-# ── Phase 2: Query RPMs from both containers in parallel ─────────────────────
-log("\nQuerying installed RPMs in parallel...")
-t1 = time.time()
+    rpm_tasks = [
+        (c, ["podman", "run", "--rm", img, "bash", "-c", "rpm -qa | sort"])
+        for c, img in images.items()
+    ]
+    for c, _ in rpm_tasks:
+        log(f"  Starting rpm -qa: {images[c]}")
 
-rpm_tasks = [
-    (c, ["podman", "run", "--rm", img, "bash", "-c", "rpm -qa | sort"])
-    for c, img in images.items()
-]
-for c, _ in rpm_tasks:
-    log(f"  Starting rpm -qa: {images[c]}")
+    rpm_results = wait_procs(start_procs(rpm_tasks))
 
-rpm_results = wait_procs(start_procs(rpm_tasks))
+    failed = [c for c, (rc, _, _) in rpm_results.items() if rc != 0]
+    if failed:
+        for c in failed:
+            _, _, stderr = rpm_results[c]
+            log(f"  FAILED rpm -qa: {images[c]}\n    {stderr.strip()}")
+        sys.exit(1)
 
-failed = [c for c, (rc, _, _) in rpm_results.items() if rc != 0]
-if failed:
-    for c in failed:
-        _, _, stderr = rpm_results[c]
-        log(f"  FAILED rpm -qa: {images[c]}\n    {stderr.strip()}")
-    log("\nCleaning up pulled images before exit...")
+    for c, (_, stdout, _) in rpm_results.items():
+        with open(outfiles[c], "w") as f:
+            f.write(stdout)
+        count = len([line for line in stdout.splitlines() if line.strip()])
+        log(f"  Done:    {images[c]} → {outfiles[c]} ({count} packages)")
+
+    log(f"RPM queries complete in {time.time() - t1:.1f}s.")
+
+finally:
+    # ── Phase 3: Remove pulled images (always, even on unexpected failure) ────
+    log("\nRemoving pulled images...")
     cleanup_images(pulled_images)
-    sys.exit(1)
-
-for c, (_, stdout, _) in rpm_results.items():
-    with open(outfiles[c], "w") as f:
-        f.write(stdout)
-    count = len([l for l in stdout.splitlines() if l.strip()])
-    log(f"  Done:    {images[c]} → {outfiles[c]} ({count} packages)")
-
-log(f"RPM queries complete in {time.time() - t1:.1f}s.")
-
-
-# ── Phase 3: Remove pulled images ────────────────────────────────────────────
-log("\nRemoving pulled images...")
-cleanup_images(pulled_images)
 
 
 # ── Write image mapping ───────────────────────────────────────────────────────

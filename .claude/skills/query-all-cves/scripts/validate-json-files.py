@@ -9,14 +9,15 @@ import sys
 
 files = sys.argv[1:]
 if not files:
-    print("Usage: validate-json-files.py file1.json [file2.json ...]")
+    print("Usage: validate-json-files.py file1.json [file2.json ...]", file=sys.stderr)
     sys.exit(1)
 
 failed = []
 for f in files:
     try:
-        json.load(open(f))
-        print(f"  OK:   {f}")
+        with open(f) as fh:
+            json.load(fh)
+        print(f"  OK:   {f}", file=sys.stderr)
     except FileNotFoundError:
         print(f"  FAIL: {f}: file not found", file=sys.stderr)
         failed.append(f)

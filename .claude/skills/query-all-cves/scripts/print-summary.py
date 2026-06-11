@@ -4,7 +4,8 @@ import json
 import sys
 
 try:
-    data = json.load(open("cve-data/unified-cves.json"))
+    with open("cve-data/unified-cves.json") as f:
+        data = json.load(f)
 except FileNotFoundError:
     print("Error: cve-data/unified-cves.json not found.", file=sys.stderr)
     sys.exit(1)

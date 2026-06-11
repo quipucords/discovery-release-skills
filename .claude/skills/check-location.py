@@ -16,9 +16,6 @@ All output goes to stderr. Exits 0 on success, 1 on failure.
 import os
 import sys
 
-MARKER = os.path.join(".claude", "skills")
-
-
 def find_root(start: str) -> str | None:
     d = start
     while True:

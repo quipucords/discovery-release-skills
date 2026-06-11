@@ -52,8 +52,8 @@ catalog_script = f"{skills}/query-redhat-catalog/scripts/query-redhat-catalog.py
 def collect_catalog():
     if not args.server_tag and not args.ui_tag:
         cmd = ["uv", "run", catalog_script]
-        result = subprocess.run(cmd, capture_output=False,
-                                stdout=open("cve-data/catalog.json", "w"))
+        with open("cve-data/catalog.json", "w") as out:
+            result = subprocess.run(cmd, capture_output=False, stdout=out)
         return result.returncode == 0
 
     # Per-container queries
@@ -74,7 +74,8 @@ def collect_catalog():
         combined["cves"].extend(data.get("cves", []))
         combined["total"] += data.get("total", 0)
 
-    json.dump(combined, open("cve-data/catalog.json", "w"), indent=2)
+    with open("cve-data/catalog.json", "w") as out:
+        json.dump(combined, out, indent=2)
     return True
 
 # Parallel jobs for gmail (optional) and jira

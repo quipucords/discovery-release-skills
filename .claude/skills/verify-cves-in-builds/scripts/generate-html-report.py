@@ -16,7 +16,8 @@ from datetime import datetime, timezone
 from html import escape
 
 try:
-    data = json.load(open("cve-data/verified-cves.json"))
+    with open("cve-data/verified-cves.json") as f:
+        data = json.load(f)
 except FileNotFoundError:
     print("Error: cve-data/verified-cves.json not found.", file=sys.stderr)
     sys.exit(1)

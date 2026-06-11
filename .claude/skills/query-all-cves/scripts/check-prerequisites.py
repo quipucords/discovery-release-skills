@@ -40,4 +40,4 @@ if errors:
         print(f"  {i}. {err}", file=sys.stderr)
     sys.exit(1)
 
-print("All prerequisites OK.")
+print("All prerequisites OK.", file=sys.stderr)

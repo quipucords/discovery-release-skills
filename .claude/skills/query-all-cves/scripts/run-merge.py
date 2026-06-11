@@ -24,9 +24,11 @@ cmd = [
 if errata_files:
     cmd += ["--errata"] + errata_files
 
-result = subprocess.run(cmd, stdout=open("cve-data/unified-cves.json", "w"))
+with open("cve-data/unified-cves.json", "w") as out:
+    result = subprocess.run(cmd, stdout=out)
+
 if result.returncode != 0:
     print("Error: merge-cve-data failed.", file=sys.stderr)
     sys.exit(1)
 
-print("Merge complete → cve-data/unified-cves.json")
+print("Merge complete → cve-data/unified-cves.json", file=sys.stderr)
