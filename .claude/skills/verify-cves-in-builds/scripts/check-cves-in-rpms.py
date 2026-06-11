@@ -10,6 +10,9 @@ Reads:
 Writes:
   cve-data/verified-cves.json  — unified-cves.json enriched with checked_containers
                                   per CVE, showing what was found and whether it's fixed
+
+All progress messages go to stderr. This script produces no stdout output
+(results are written to cve-data/verified-cves.json). Exits non-zero on failure.
 """
 import json
 import re
@@ -25,6 +28,10 @@ RPM_FILES = {
 }
 
 SEVERITY_ORDER = {"Critical": 4, "Important": 3, "Moderate": 2, "Low": 1, "Unknown": 0}
+
+
+def log(msg: str) -> None:
+    print(msg, file=sys.stderr, flush=True)
 
 
 # ── RPM parsing and version comparison ───────────────────────────────────────
@@ -88,10 +95,10 @@ def load_json(path: str, label: str) -> dict | None:
         with open(path) as f:
             return json.load(f)
     except FileNotFoundError:
-        print(f"Error: {label} not found: {path}", file=sys.stderr)
+        log(f"Error: {label} not found: {path}")
         return None
     except json.JSONDecodeError as e:
-        print(f"Error: {label} is not valid JSON ({path}): {e}", file=sys.stderr)
+        log(f"Error: {label} is not valid JSON ({path}): {e}")
         return None
 
 
@@ -112,11 +119,11 @@ def load_rpm_list(path: str) -> dict[str, list[dict]]:
                     name = parsed["name"]
                     index.setdefault(name, []).append({**parsed, "nvra": nvra})
     except FileNotFoundError:
-        print(f"Error: RPM list not found: {path}", file=sys.stderr)
+        log(f"Error: RPM list not found: {path}")
     return index
 
 
-print("Loading input files...", flush=True)
+log("Loading input files...")
 
 unified = load_json("cve-data/unified-cves.json", "unified-cves.json")
 checked_images = load_json("cve-data/checked-images.json", "checked-images.json")
@@ -128,8 +135,10 @@ rpm_index: dict[str, dict[str, list[dict]]] = {}
 for container, path in RPM_FILES.items():
     if container in checked_images:
         rpm_index[container] = load_rpm_list(path)
-        print(f"  Loaded {sum(len(v) for v in rpm_index[container].values())} packages "
-              f"from {path}", flush=True)
+        log(f"  Loaded {sum(len(v) for v in rpm_index[container].values())} packages "
+            f"from {path}")
+    else:
+        log(f"  Skipping {container}: not in checked-images.json (was not pulled)")
 
 
 # ── Check each CVE against container RPM lists ───────────────────────────────
@@ -146,32 +155,34 @@ def check_cve_in_container(cve: dict, container: str) -> dict:
         "is_fixed": None,
     }
 
-    # Find the minimum fixed NVR for this container's relevant packages
+    # Build a map of package name → minimum fixed NVR from fixed_packages.
+    # fixed_packages may list multiple NVRs for the same package across different
+    # RHEL releases; we keep the earliest (minimum) to avoid false "fixed" verdicts.
     fixed_by_name: dict[str, str] = {}
     for fp in cve.get("fixed_packages", []):
         name = package_name_from_entry(fp)
         nvr  = fp.get("nvr")
         if name and nvr:
-            # Keep the earliest (minimum) fixed NVR for each package name
             if name not in fixed_by_name or parse_evr(nvr) < parse_evr(fixed_by_name[name]):
                 fixed_by_name[name] = nvr
 
-    # Find candidate package names to search for in this container
+    # Collect candidate package names from both vulnerable_packages and fixed_packages.
+    # We search both because:
+    #   - vulnerable_packages (from catalog) has the richest name data
+    #   - fixed_packages (from errata) catches CVEs where catalog data is sparse
+    #     (e.g. JIRA-only CVEs that have no catalog vulnerable_packages entry)
     search_names: set[str] = set()
     for vp in cve.get("vulnerable_packages", []):
         name = package_name_from_entry(vp)
         if name:
             search_names.add(name)
-    # Also search by names from fixed_packages in case vulnerable_packages is sparse
     search_names.update(fixed_by_name.keys())
 
     if not search_names:
-        result["installed_nvras"] = []
         return result
 
     container_index = rpm_index.get(container, {})
 
-    # Search for any matching packages
     found_nvras: list[str] = []
     relevant_fixed_nvr: str | None = None
 
@@ -204,8 +215,9 @@ def check_cve_in_container(cve: dict, container: str) -> dict:
     return result
 
 
-print(f"\nChecking {len(unified['cves'])} CVEs against container RPM lists...", flush=True)
-t0 = __import__("time").time()
+log(f"\nChecking {len(unified['cves'])} CVEs against container RPM lists...")
+import time
+t0 = time.time()
 
 enriched_cves = []
 stats = {c: {"found": 0, "fixed": 0, "not_fixed": 0, "unknown": 0}
@@ -217,6 +229,8 @@ for cve in unified["cves"]:
 
     for container in cve.get("affected_containers", []):
         if container not in rpm_index:
+            log(f"  Warning: {cve['cve_id']} affects {container} but no RPM list was loaded "
+                f"for it — skipping this container")
             continue
         entry = check_cve_in_container(cve, container)
         checked_containers[container] = entry
@@ -234,8 +248,7 @@ for cve in unified["cves"]:
     cve_out["checked_containers"] = checked_containers
     enriched_cves.append(cve_out)
 
-elapsed = __import__("time").time() - t0
-print(f"Checked in {elapsed:.1f}s.", flush=True)
+log(f"Checked {len(enriched_cves)} CVEs in {time.time() - t0:.1f}s.")
 
 
 # ── Build output ──────────────────────────────────────────────────────────────
@@ -260,4 +273,4 @@ output = {
 with open("cve-data/verified-cves.json", "w") as f:
     json.dump(output, f, indent=2)
 
-print(f"\nWrote cve-data/verified-cves.json ({len(enriched_cves)} CVEs)")
+log(f"\nWrote cve-data/verified-cves.json ({len(enriched_cves)} CVEs)")

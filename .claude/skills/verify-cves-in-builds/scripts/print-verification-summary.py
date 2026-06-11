@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Print a human-readable summary of cve-data/verified-cves.json."""
+"""Print a human-readable summary of cve-data/verified-cves.json.
+
+The summary is written to stdout. Errors go to stderr.
+Exits non-zero if the input file is missing or unreadable.
+"""
 import json
 import sys
 
@@ -10,6 +14,9 @@ try:
 except FileNotFoundError:
     print("Error: cve-data/verified-cves.json not found. Run check-cves-in-rpms.py first.",
           file=sys.stderr)
+    sys.exit(1)
+except json.JSONDecodeError as e:
+    print(f"Error: cve-data/verified-cves.json is not valid JSON: {e}", file=sys.stderr)
     sys.exit(1)
 
 verification = data.get("verification", {})
@@ -24,34 +31,54 @@ print()
 for container, image in images.items():
     s = vsummary.get(container, {})
     print(f"  {container}")
-    print(f"    Checked image: {image}")
+    print(f"    Checked image:     {image}")
     print(f"    Packages found:    {s.get('found', 0)}")
     print(f"    Fixed in build:    {s.get('fixed', 0)}")
     print(f"    NOT fixed in build:{s.get('not_fixed', 0)}")
     print(f"    Fix status unknown:{s.get('unknown', 0)}")
     print()
 
-# List unfixed CVEs per container, sorted by severity
+# Per container: list unfixed CVEs, then unknown-status CVEs
 for container in images:
     unfixed = []
+    status_unknown = []
+
     for cve in cves:
         entry = cve.get("checked_containers", {}).get(container, {})
-        if entry.get("is_fixed") is False:
+        is_fixed = entry.get("is_fixed")
+        if is_fixed is False:
             unfixed.append(cve)
+        elif is_fixed is None and entry.get("package_found") is True:
+            # Package found but fix version unknown — worth surfacing
+            status_unknown.append(cve)
 
-    if not unfixed:
+    sev_key = lambda c: -SEVERITY_ORDER.get(c.get("severity") or "Unknown", 0)
+
+    if not unfixed and not status_unknown:
         print(f"  {container}: no unfixed CVEs found in build.")
-        continue
+    else:
+        if unfixed:
+            unfixed.sort(key=sev_key)
+            print(f"  {container}: {len(unfixed)} unfixed CVE(s):")
+            for cve in unfixed:
+                entry = cve["checked_containers"][container]
+                installed = ", ".join(entry.get("installed_nvras") or ["?"])
+                fixed_nvr = entry.get("minimum_fixed_nvr") or "?"
+                print(f"    [{cve.get('severity', '?'):9s}] {cve['cve_id']}")
+                print(f"               installed: {installed}")
+                print(f"               needs:     {fixed_nvr}")
+            print()
 
-    unfixed.sort(key=lambda c: -SEVERITY_ORDER.get(c.get("severity") or "Unknown", 0))
-    print(f"  {container}: {len(unfixed)} unfixed CVE(s):")
-    for cve in unfixed:
-        entry = cve["checked_containers"][container]
-        installed = ", ".join(entry.get("installed_nvras") or ["?"])
-        fixed_nvr = entry.get("minimum_fixed_nvr") or "?"
-        print(f"    [{cve.get('severity', '?'):9s}] {cve['cve_id']}")
-        print(f"               installed: {installed}")
-        print(f"               needs:     {fixed_nvr}")
-    print()
+        if status_unknown:
+            status_unknown.sort(key=sev_key)
+            print(f"  {container}: {len(status_unknown)} CVE(s) with unknown fix status "
+                  f"(package found but no fixed NVR available):")
+            for cve in status_unknown:
+                entry = cve["checked_containers"][container]
+                installed = ", ".join(entry.get("installed_nvras") or ["?"])
+                print(f"    [{cve.get('severity', '?'):9s}] {cve['cve_id']}")
+                print(f"               installed: {installed}")
+                print(f"               fixed NVR: unknown")
+            print()
 
 print(f"Full report: cve-data/verified-cves.json")

@@ -5,6 +5,9 @@ Pulls discovery-server and discovery-ui images in parallel, queries all
 installed RPMs from each container in a single run per image, writes the
 results to cve-data/, then removes the images.
 
+All progress messages go to stderr. This script produces no stdout output
+(results are written to files). Exits non-zero on any failure.
+
 Usage:
   python3 pull-and-query-rpms.py \\
     --server-image quay.io/quipucords/quipucords:latest \\
@@ -39,6 +42,10 @@ outfiles = {
 os.makedirs("cve-data", exist_ok=True)
 
 
+def log(msg: str) -> None:
+    print(msg, file=sys.stderr, flush=True)
+
+
 def start_procs(tasks):
     """Start a list of (label, cmd) as background Popen processes."""
     running = []
@@ -57,13 +64,21 @@ def wait_procs(running):
     return results
 
 
+def cleanup_images(pulled: list[str]) -> None:
+    """Remove images that were successfully pulled, logging each removal."""
+    for img in pulled:
+        log(f"  Removing: {img}")
+        subprocess.run(["podman", "rmi", img], capture_output=True)
+        log(f"  Removed:  {img}")
+
+
 # ── Phase 1: Pull both images in parallel ────────────────────────────────────
-print("Pulling container images in parallel...", flush=True)
+log("Pulling container images in parallel...")
 t0 = time.time()
 
 pull_tasks = [(c, ["podman", "pull", img]) for c, img in images.items()]
 for c, _ in pull_tasks:
-    print(f"  Starting pull: {images[c]}", flush=True)
+    log(f"  Starting pull: {images[c]}")
 
 pull_results = wait_procs(start_procs(pull_tasks))
 
@@ -71,16 +86,17 @@ failed = [c for c, (rc, _, _) in pull_results.items() if rc != 0]
 if failed:
     for c in failed:
         _, _, stderr = pull_results[c]
-        print(f"  FAILED: {images[c]}\n    {stderr.strip()}", file=sys.stderr)
+        log(f"  FAILED pull: {images[c]}\n    {stderr.strip()}")
     sys.exit(1)
 
 for c in images:
-    print(f"  Pulled:  {images[c]}", flush=True)
-print(f"All images pulled in {time.time() - t0:.1f}s.", flush=True)
+    log(f"  Pulled:  {images[c]}")
+log(f"All images pulled in {time.time() - t0:.1f}s.")
+pulled_images = list(images.values())
 
 
 # ── Phase 2: Query RPMs from both containers in parallel ─────────────────────
-print("\nQuerying installed RPMs in parallel...", flush=True)
+log("\nQuerying installed RPMs in parallel...")
 t1 = time.time()
 
 rpm_tasks = [
@@ -88,7 +104,7 @@ rpm_tasks = [
     for c, img in images.items()
 ]
 for c, _ in rpm_tasks:
-    print(f"  Starting rpm -qa: {images[c]}", flush=True)
+    log(f"  Starting rpm -qa: {images[c]}")
 
 rpm_results = wait_procs(start_procs(rpm_tasks))
 
@@ -96,32 +112,29 @@ failed = [c for c, (rc, _, _) in rpm_results.items() if rc != 0]
 if failed:
     for c in failed:
         _, _, stderr = rpm_results[c]
-        print(f"  FAILED: {images[c]}\n    {stderr.strip()}", file=sys.stderr)
-    # Clean up pulled images before exiting
-    for img in images.values():
-        subprocess.run(["podman", "rmi", img], capture_output=True)
+        log(f"  FAILED rpm -qa: {images[c]}\n    {stderr.strip()}")
+    log("\nCleaning up pulled images before exit...")
+    cleanup_images(pulled_images)
     sys.exit(1)
 
 for c, (_, stdout, _) in rpm_results.items():
     with open(outfiles[c], "w") as f:
         f.write(stdout)
     count = len([l for l in stdout.splitlines() if l.strip()])
-    print(f"  Done:    {images[c]} → {outfiles[c]} ({count} packages)", flush=True)
+    log(f"  Done:    {images[c]} → {outfiles[c]} ({count} packages)")
 
-print(f"RPM queries complete in {time.time() - t1:.1f}s.", flush=True)
+log(f"RPM queries complete in {time.time() - t1:.1f}s.")
 
 
 # ── Phase 3: Remove pulled images ────────────────────────────────────────────
-print("\nRemoving pulled images...", flush=True)
-for c, img in images.items():
-    subprocess.run(["podman", "rmi", img], capture_output=True)
-    print(f"  Removed: {img}", flush=True)
+log("\nRemoving pulled images...")
+cleanup_images(pulled_images)
 
 
 # ── Write image mapping ───────────────────────────────────────────────────────
 with open("cve-data/checked-images.json", "w") as f:
     json.dump(images, f, indent=2)
 
-print(f"\nDone in {time.time() - t0:.1f}s total.")
-print(f"  RPM lists: {outfiles[SERVER_CONTAINER]}, {outfiles[UI_CONTAINER]}")
-print(f"  Image map: cve-data/checked-images.json")
+log(f"\nDone in {time.time() - t0:.1f}s total.")
+log(f"  RPM lists: {outfiles[SERVER_CONTAINER]}, {outfiles[UI_CONTAINER]}")
+log(f"  Image map: cve-data/checked-images.json")
