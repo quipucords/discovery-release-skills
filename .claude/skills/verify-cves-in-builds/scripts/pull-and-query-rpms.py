@@ -72,6 +72,22 @@ def cleanup_images(pulled: list[str]) -> None:
         log(f"  Removed:  {img}")
 
 
+# ── Pre-flight: check registry.redhat.io auth if needed ──────────────────────
+RH_REGISTRY = "registry.redhat.io"
+if any(img.startswith(RH_REGISTRY) for img in images.values()):
+    result = subprocess.run(
+        ["podman", "login", "--get-login", RH_REGISTRY],
+        capture_output=True, text=True
+    )
+    if result.returncode != 0:
+        log(f"Error: images from {RH_REGISTRY} require authentication.")
+        log(f"  Log in with: podman login {RH_REGISTRY}")
+        log(f"  Use your Red Hat Customer Portal credentials.")
+        log(f"  See: https://access.redhat.com/RegistryAuthentication")
+        sys.exit(1)
+    log(f"Authenticated to {RH_REGISTRY} as {result.stdout.strip()}")
+
+
 # ── Phase 1: Pull both images in parallel ────────────────────────────────────
 log("Pulling container images in parallel...")
 t0 = time.time()

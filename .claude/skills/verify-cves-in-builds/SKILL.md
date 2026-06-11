@@ -29,7 +29,14 @@ installed in a real build.
 
 - `cve-data/unified-cves.json` must exist — run `query-all-cves` first
 - `podman` installed and in PATH
-- Network access to the container registry (quay.io for default upstream images)
+- Network access to the container registry
+- **Downstream images only:** `registry.redhat.io` requires authentication.
+  Log in before running this skill:
+  ```bash
+  podman login registry.redhat.io
+  ```
+  Use your Red Hat Customer Portal credentials. See:
+  https://access.redhat.com/RegistryAuthentication
 
 ## Orchestration
 
