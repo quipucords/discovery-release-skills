@@ -1,0 +1,263 @@
+#!/usr/bin/env python3
+"""Compare CVE fix data against installed RPMs in pulled container images.
+
+Reads:
+  cve-data/unified-cves.json   — CVE records with vulnerable_packages + fixed_packages
+  cve-data/rpms-server.txt     — rpm -qa output from discovery-server image
+  cve-data/rpms-ui.txt         — rpm -qa output from discovery-ui image
+  cve-data/checked-images.json — mapping of container name → image URL checked
+
+Writes:
+  cve-data/verified-cves.json  — unified-cves.json enriched with checked_containers
+                                  per CVE, showing what was found and whether it's fixed
+"""
+import json
+import re
+import sys
+from datetime import datetime, timezone
+
+SERVER_CONTAINER = "discovery/discovery-server-rhel9"
+UI_CONTAINER     = "discovery/discovery-ui-rhel9"
+
+RPM_FILES = {
+    SERVER_CONTAINER: "cve-data/rpms-server.txt",
+    UI_CONTAINER:     "cve-data/rpms-ui.txt",
+}
+
+SEVERITY_ORDER = {"Critical": 4, "Important": 3, "Moderate": 2, "Low": 1, "Unknown": 0}
+
+
+# ── RPM parsing and version comparison ───────────────────────────────────────
+
+NVRA_RE = re.compile(r'^(.+?)-([^-]+)-([^-]+)\.([^.]+)$')
+EPOCH_RE = re.compile(r'^(\d+):(.+)$')
+NAME_VERSION_START_RE = re.compile(r'-(\d)')
+
+
+def parse_nvra(nvra: str) -> dict | None:
+    """Parse 'name-version-release.arch' into components. Returns None if unparseable."""
+    m = NVRA_RE.match(nvra.strip())
+    if not m:
+        return None
+    return {"name": m.group(1), "version": m.group(2), "release": m.group(3), "arch": m.group(4)}
+
+
+def parse_evr(s: str) -> tuple[str, str, str]:
+    """Parse a version string into (epoch, version, release) for comparison."""
+    # Strip leading package name if present (e.g. "nginx-1.24.0-6.el9" → "1.24.0-6.el9")
+    if s and not s[0].isdigit() and ":" not in s[:3]:
+        m = NAME_VERSION_START_RE.search(s)
+        if m:
+            s = s[m.start() + 1:]
+
+    epoch = "0"
+    m = EPOCH_RE.match(s)
+    if m:
+        epoch, s = m.group(1), m.group(2)
+
+    parts = s.rsplit("-", 1)
+    if len(parts) == 2:
+        return (epoch, parts[0], parts[1])
+    return (epoch, s, "0")
+
+
+def evr_gte(installed_vr: str, fixed_nvr: str) -> bool:
+    """Return True if installed version-release >= fixed NVR (package name stripped)."""
+    installed_evr = parse_evr(installed_vr)
+    fixed_evr = parse_evr(fixed_nvr)
+    return installed_evr >= fixed_evr
+
+
+def package_name_from_entry(entry: dict) -> str | None:
+    """Extract the base RPM package name from a vulnerable_packages or fixed_packages entry."""
+    if entry.get("name"):
+        return entry["name"]
+    # Fall back to parsing from nvr or rpm_nvras
+    nvr = entry.get("nvr") or next(iter(entry.get("rpm_nvras", [])), None)
+    if nvr:
+        m = NAME_VERSION_START_RE.search(nvr)
+        if m:
+            return nvr[:m.start()]
+    return None
+
+
+# ── Load input files ──────────────────────────────────────────────────────────
+
+def load_json(path: str, label: str) -> dict | None:
+    try:
+        with open(path) as f:
+            return json.load(f)
+    except FileNotFoundError:
+        print(f"Error: {label} not found: {path}", file=sys.stderr)
+        return None
+    except json.JSONDecodeError as e:
+        print(f"Error: {label} is not valid JSON ({path}): {e}", file=sys.stderr)
+        return None
+
+
+def load_rpm_list(path: str) -> dict[str, list[dict]]:
+    """
+    Load an rpm -qa output file and index packages by name.
+    Returns dict mapping package name → list of parsed NVRA dicts.
+    """
+    index: dict[str, list[dict]] = {}
+    try:
+        with open(path) as f:
+            for line in f:
+                nvra = line.strip()
+                if not nvra:
+                    continue
+                parsed = parse_nvra(nvra)
+                if parsed:
+                    name = parsed["name"]
+                    index.setdefault(name, []).append({**parsed, "nvra": nvra})
+    except FileNotFoundError:
+        print(f"Error: RPM list not found: {path}", file=sys.stderr)
+    return index
+
+
+print("Loading input files...", flush=True)
+
+unified = load_json("cve-data/unified-cves.json", "unified-cves.json")
+checked_images = load_json("cve-data/checked-images.json", "checked-images.json")
+
+if not unified or not checked_images:
+    sys.exit(1)
+
+rpm_index: dict[str, dict[str, list[dict]]] = {}
+for container, path in RPM_FILES.items():
+    if container in checked_images:
+        rpm_index[container] = load_rpm_list(path)
+        print(f"  Loaded {sum(len(v) for v in rpm_index[container].values())} packages "
+              f"from {path}", flush=True)
+
+
+# ── Check each CVE against container RPM lists ───────────────────────────────
+
+def check_cve_in_container(cve: dict, container: str) -> dict:
+    """
+    Return a checked_containers entry for one CVE + container combination.
+    """
+    result = {
+        "checked_image": checked_images.get(container),
+        "package_found": False,
+        "installed_nvras": [],
+        "minimum_fixed_nvr": None,
+        "is_fixed": None,
+    }
+
+    # Find the minimum fixed NVR for this container's relevant packages
+    fixed_by_name: dict[str, str] = {}
+    for fp in cve.get("fixed_packages", []):
+        name = package_name_from_entry(fp)
+        nvr  = fp.get("nvr")
+        if name and nvr:
+            # Keep the earliest (minimum) fixed NVR for each package name
+            if name not in fixed_by_name or parse_evr(nvr) < parse_evr(fixed_by_name[name]):
+                fixed_by_name[name] = nvr
+
+    # Find candidate package names to search for in this container
+    search_names: set[str] = set()
+    for vp in cve.get("vulnerable_packages", []):
+        name = package_name_from_entry(vp)
+        if name:
+            search_names.add(name)
+    # Also search by names from fixed_packages in case vulnerable_packages is sparse
+    search_names.update(fixed_by_name.keys())
+
+    if not search_names:
+        result["installed_nvras"] = []
+        return result
+
+    container_index = rpm_index.get(container, {})
+
+    # Search for any matching packages
+    found_nvras: list[str] = []
+    relevant_fixed_nvr: str | None = None
+
+    for name in search_names:
+        matches = container_index.get(name, [])
+        for m in matches:
+            found_nvras.append(m["nvra"])
+        if name in fixed_by_name and (relevant_fixed_nvr is None or
+                parse_evr(fixed_by_name[name]) < parse_evr(relevant_fixed_nvr)):
+            relevant_fixed_nvr = fixed_by_name[name]
+
+    result["installed_nvras"] = sorted(found_nvras)
+    result["minimum_fixed_nvr"] = relevant_fixed_nvr
+
+    if not found_nvras:
+        return result  # package_found stays False, is_fixed stays None
+
+    result["package_found"] = True
+
+    if relevant_fixed_nvr is None:
+        return result  # is_fixed stays None — fix version unknown
+
+    # is_fixed = True only if ALL matching packages are at or above the fixed version
+    all_fixed = all(
+        evr_gte(f"{m['version']}-{m['release']}", relevant_fixed_nvr)
+        for name in search_names
+        for m in container_index.get(name, [])
+    )
+    result["is_fixed"] = all_fixed
+    return result
+
+
+print(f"\nChecking {len(unified['cves'])} CVEs against container RPM lists...", flush=True)
+t0 = __import__("time").time()
+
+enriched_cves = []
+stats = {c: {"found": 0, "fixed": 0, "not_fixed": 0, "unknown": 0}
+         for c in checked_images}
+
+for cve in unified["cves"]:
+    cve_out = dict(cve)
+    checked_containers: dict[str, dict] = {}
+
+    for container in cve.get("affected_containers", []):
+        if container not in rpm_index:
+            continue
+        entry = check_cve_in_container(cve, container)
+        checked_containers[container] = entry
+
+        s = stats[container]
+        if entry["package_found"]:
+            s["found"] += 1
+            if entry["is_fixed"] is True:
+                s["fixed"] += 1
+            elif entry["is_fixed"] is False:
+                s["not_fixed"] += 1
+            else:
+                s["unknown"] += 1
+
+    cve_out["checked_containers"] = checked_containers
+    enriched_cves.append(cve_out)
+
+elapsed = __import__("time").time() - t0
+print(f"Checked in {elapsed:.1f}s.", flush=True)
+
+
+# ── Build output ──────────────────────────────────────────────────────────────
+
+output = {
+    "generated_at": unified.get("generated_at"),
+    "verified_at": datetime.now(timezone.utc).isoformat(),
+    "verification": {
+        "images": dict(checked_images),
+    },
+    "summary": unified.get("summary", {}),
+    "verification_summary": {
+        container: {
+            "checked_image": checked_images.get(container),
+            **s,
+        }
+        for container, s in stats.items()
+    },
+    "cves": enriched_cves,
+}
+
+with open("cve-data/verified-cves.json", "w") as f:
+    json.dump(output, f, indent=2)
+
+print(f"\nWrote cve-data/verified-cves.json ({len(enriched_cves)} CVEs)")
