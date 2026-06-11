@@ -35,15 +35,44 @@ installed in a real build.
 
 ### Step 0 — Gather options from the user
 
-Before running anything, ask the user which container images to check.
+Use `AskUserQuestion` to present a structured choice — do not ask via plain text
+and wait for a typed reply. This ensures a consistent, predictable UX every time
+the skill is invoked.
 
-**Default images (upstream Quay.io pre-publication builds):**
-- Server: `quay.io/quipucords/quipucords:latest`
-- UI:     `quay.io/quipucords/quipucords-ui:latest`
+```
+AskUserQuestion({
+  "questions": [{
+    "question": "Which container images should I verify CVEs against?",
+    "header": "Images",
+    "multiSelect": false,
+    "options": [
+      {
+        "label": "Defaults (latest)",
+        "description": "quay.io/quipucords/quipucords:latest and quay.io/quipucords/quipucords-ui:latest"
+      },
+      {
+        "label": "Specific tag",
+        "description": "Use a specific version tag (e.g. :2.5.1) or PR build digest — follow-up question will ask for each"
+      },
+      {
+        "label": "Downstream (registry.redhat.io)",
+        "description": "Check the published downstream images: registry.redhat.io/discovery/discovery-server-rhel9 and discovery-ui-rhel9"
+      }
+    ]
+  }]
+})
+```
 
-Ask whether these defaults are correct, or if the user wants to check a specific
-tag (e.g. `:2.5.1`, a PR build digest, or a downstream `registry.redhat.io` image).
-Each container's image can be specified independently.
+If the user selects **Defaults**, use:
+- `--server-image quay.io/quipucords/quipucords:latest`
+- `--ui-image quay.io/quipucords/quipucords-ui:latest`
+
+If the user selects **Specific tag**, ask a follow-up `AskUserQuestion` for each
+image's tag separately, then construct the full image URLs.
+
+If the user selects **Downstream**, use:
+- `--server-image registry.redhat.io/discovery/discovery-server-rhel9:latest`
+- `--ui-image registry.redhat.io/discovery/discovery-ui-rhel9:latest`
 
 ### Step 0 — Navigate to project root
 
@@ -65,9 +94,7 @@ Both images are pulled and queried in parallel internally — no shell backgroun
 jobs needed:
 
 ```bash
-python3 .claude/skills/verify-cves-in-builds/scripts/pull-and-query-rpms.py \
-  --server-image quay.io/quipucords/quipucords:latest \
-  --ui-image quay.io/quipucords/quipucords-ui:latest
+python3 .claude/skills/verify-cves-in-builds/scripts/pull-and-query-rpms.py --server-image quay.io/quipucords/quipucords:latest --ui-image quay.io/quipucords/quipucords-ui:latest
 ```
 
 Outputs:
