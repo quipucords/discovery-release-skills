@@ -31,6 +31,15 @@ project README for details.
 ## Invocation
 
 ```bash
+root=$(git rev-parse --show-toplevel 2>/dev/null)
+if [ -z "$root" ]; then
+  d=$PWD
+  while [ "$d" != "/" ]; do
+    [ -d "$d/.claude/skills" ] && root=$d && break
+    d=$(dirname "$d")
+  done
+fi
+[ -n "$root" ] && cd "$root" || { echo "Error: cannot find project root"; exit 1; }
 mkdir -p cve-data
 
 # Search for open CVE issues (default: excludes Done/Closed, last 90 days)

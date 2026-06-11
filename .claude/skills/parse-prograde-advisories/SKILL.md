@@ -21,6 +21,17 @@ retrieves the actual CVE IDs and fixed package NVRs for each advisory.
 ## Invocation
 
 ```bash
+root=$(git rev-parse --show-toplevel 2>/dev/null)
+if [ -z "$root" ]; then
+  d=$PWD
+  while [ "$d" != "/" ]; do
+    [ -d "$d/.claude/skills" ] && root=$d && break
+    d=$(dirname "$d")
+  done
+fi
+[ -n "$root" ] && cd "$root" || { echo "Error: cannot find project root"; exit 1; }
+mkdir -p cve-data
+
 # From a saved file (output of query-gmail skill)
 uv run .claude/skills/parse-prograde-advisories/scripts/parse-prograde-advisories.py cve-data/prograde-emails.json > cve-data/prograde-advisories.json
 
