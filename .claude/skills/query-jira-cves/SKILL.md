@@ -65,6 +65,9 @@ JSON to stdout: `{"issues": [{...}, ...]}` where each issue contains:
 **Important:** `vulnerable_package_nvrs` contains the **vulnerable** package version,
 not the fixed version. Use `query-errata-advisory` to find fixed NVRs.
 
+Progress logs go to stderr. **Never use `2>&1`** when redirecting to the output file —
+it will mix log lines into the JSON and corrupt it.
+
 ## Pipeline
 
 This skill is a data source. Its output (`jira.json`) is consumed by the

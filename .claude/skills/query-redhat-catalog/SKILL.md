@@ -60,6 +60,9 @@ JSON to stdout: `{"total": N, "cves": [{...}, ...]}` where each CVE contains:
 `advisory_link`, `creation_date`, `affected_packages` (with name/version/arch),
 `rpm_nvras` (full NVRA strings of vulnerable packages).
 
+Progress logs go to stderr. **Never use `2>&1`** when redirecting to the output file —
+it will mix log lines into the JSON and corrupt it.
+
 ## Pipeline
 
 ```

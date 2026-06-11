@@ -54,6 +54,9 @@ JSON to stdout: `{"advisories": [{...}, ...]}` where each advisory contains:
 Note: `advisory_id` here is a **numeric Errata ID** (e.g. `"165721"`), not an RHSA
 designation. Pass it to `query-errata-advisory` to get CVE IDs and fixed packages.
 
+Progress logs go to stderr. **Never use `2>&1`** when redirecting to the output file —
+it will mix log lines into the JSON and corrupt it.
+
 ## Pipeline
 
 ```

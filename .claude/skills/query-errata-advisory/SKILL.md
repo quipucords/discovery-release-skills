@@ -54,11 +54,15 @@ uv run .claude/skills/query-errata-advisory/scripts/query-errata-advisory.py 165
 # Query by RHSA designation (from catalog)
 uv run .claude/skills/query-errata-advisory/scripts/query-errata-advisory.py "RHSA-2026:12441" > cve-data/errata-RHSA-2026-12441.json
 
-# Batch: query all advisory IDs from catalog output
-jq -r '.cves[].advisory_id | select(.)' cve-data/catalog.json | sort -u | while read id; do
+# Batch (parallel): query all advisory IDs — significantly faster than sequential
+# Feed IDs from a pre-built list (see query-all-cves for the recommended approach
+# that deduplicates across catalog and prograde sources)
+while IFS= read -r id; do
   safe="${id//[^a-zA-Z0-9]/-}"
-  uv run .claude/skills/query-errata-advisory/scripts/query-errata-advisory.py "$id" > "cve-data/errata-${safe}.json"
-done
+  uv run .claude/skills/query-errata-advisory/scripts/query-errata-advisory.py "$id" \
+    > "cve-data/errata-${safe}.json" &
+done < cve-data/advisory-ids.txt
+wait
 
 # See all options
 uv run .claude/skills/query-errata-advisory/scripts/query-errata-advisory.py --help

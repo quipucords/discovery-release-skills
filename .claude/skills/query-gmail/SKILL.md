@@ -56,6 +56,15 @@ uv run .claude/skills/query-gmail/scripts/query-gmail.py --help
 JSON to stdout: `{"messages": [{...}, ...]}` where each message contains:
 `message_id`, `subject`, `from`, `to`, `cc`, `date`, `body`, `labels`.
 
+Progress logs go to stderr. **Never use `2>&1`** when redirecting to the output file —
+it will mix log lines into the JSON and corrupt it.
+
+For the `--since` date, use a value relative to today (e.g. 90 days ago) to stay
+consistent with the default window used by `query-jira-cves`:
+```bash
+--since "$(python3 -c 'import datetime; print((datetime.date.today() - datetime.timedelta(days=90)).isoformat())')"
+```
+
 All logs go to stderr. Only JSON goes to stdout — safe to pipe or redirect.
 
 ## Pipeline
