@@ -108,6 +108,7 @@ def load_rpm_list(path: str) -> dict[str, list[dict]]:
     Returns dict mapping package name → list of parsed NVRA dicts.
     """
     index: dict[str, list[dict]] = {}
+    skipped = []
     try:
         with open(path) as f:
             for line in f:
@@ -118,8 +119,14 @@ def load_rpm_list(path: str) -> dict[str, list[dict]]:
                 if parsed:
                     name = parsed["name"]
                     index.setdefault(name, []).append({**parsed, "nvra": nvra})
+                else:
+                    skipped.append(nvra)
     except FileNotFoundError:
         log(f"Error: RPM list not found: {path}")
+        return index
+    if skipped:
+        log(f"  Skipped {len(skipped)} unparseable line(s) in {path} "
+            f"(e.g. gpg-pubkey entries with no arch suffix): {', '.join(skipped[:3])}")
     return index
 
 

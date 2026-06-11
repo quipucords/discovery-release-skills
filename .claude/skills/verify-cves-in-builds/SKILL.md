@@ -38,6 +38,10 @@ installed in a real build.
   Use your Red Hat Customer Portal credentials. See:
   https://access.redhat.com/RegistryAuthentication
 
+  `pull-and-query-rpms.py` checks authentication automatically before
+  attempting any pulls and exits with a clear error if not logged in.
+  There is no need to add a separate auth check step before running it.
+
 ## Orchestration
 
 ### Step 0 — Gather options from the user
