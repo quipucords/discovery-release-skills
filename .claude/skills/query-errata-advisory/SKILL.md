@@ -38,19 +38,19 @@ klist -s && echo "ticket valid" || echo "need to kinit"
 
 ```bash
 # Query by numeric ID (from prograde)
-uv run scripts/query-errata-advisory.py 165721 > errata-165721.json
+uv run .claude/skills/query-errata-advisory/scripts/query-errata-advisory.py 165721 > errata-165721.json
 
 # Query by RHSA designation (from catalog)
-uv run scripts/query-errata-advisory.py "RHSA-2026:12441" > errata-RHSA-2026-12441.json
+uv run .claude/skills/query-errata-advisory/scripts/query-errata-advisory.py "RHSA-2026:12441" > errata-RHSA-2026-12441.json
 
 # Batch: query all advisory IDs from catalog output
 jq -r '.cves[].advisory_id | select(.)' catalog.json | sort -u | while read id; do
   safe="${id//[^a-zA-Z0-9]/-}"
-  uv run scripts/query-errata-advisory.py "$id" > "errata-${safe}.json"
+  uv run .claude/skills/query-errata-advisory/scripts/query-errata-advisory.py "$id" > "errata-${safe}.json"
 done
 
 # See all options
-uv run scripts/query-errata-advisory.py --help
+uv run .claude/skills/query-errata-advisory/scripts/query-errata-advisory.py --help
 ```
 
 ## Output
@@ -68,7 +68,7 @@ JSON to stdout (one object per invocation):
 One errata output file per advisory. Pass all of them together to `merge-cve-data`:
 
 ```bash
-uv run scripts/merge-cve-data.py \
+uv run .claude/skills/merge-cve-data/scripts/merge-cve-data.py \
   --catalog catalog.json \
   --prograde prograde-advisories.json \
   --errata errata-*.json \

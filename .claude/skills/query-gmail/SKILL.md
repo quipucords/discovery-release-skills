@@ -31,13 +31,13 @@ Also useful for any ad-hoc Gmail query during release preparation.
 
 ```bash
 # Fetch Prograde emails since a given date and save for downstream processing
-uv run scripts/query-gmail.py \
+uv run .claude/skills/query-gmail/scripts/query-gmail.py \
   --label "alerts/prograde" \
   --since "2026-05-01" \
   > prograde-emails.json
 
 # See all options
-uv run scripts/query-gmail.py --help
+uv run .claude/skills/query-gmail/scripts/query-gmail.py --help
 ```
 
 ## Output
@@ -59,6 +59,6 @@ query-jira-cves ─────────────────────�
 Pass this skill's output directly to `parse-prograde-advisories`:
 
 ```bash
-uv run scripts/query-gmail.py --label "alerts/prograde" --since "2026-05-01" \
-  | uv run scripts/parse-prograde-advisories.py
+uv run .claude/skills/query-gmail/scripts/query-gmail.py --label "alerts/prograde" --since "2026-05-01" \
+  | uv run .claude/skills/parse-prograde-advisories/scripts/parse-prograde-advisories.py
 ```

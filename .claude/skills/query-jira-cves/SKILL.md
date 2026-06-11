@@ -33,16 +33,16 @@ export JIRA_API_TOKEN="your-api-token"   # from id.atlassian.com
 
 ```bash
 # Search for open CVE issues (default: excludes Done/Closed, last 90 days)
-uv run scripts/query-jira-cves.py --summary-contains "CVE" > jira.json
+uv run .claude/skills/query-jira-cves/scripts/query-jira-cves.py --summary-contains "CVE" > jira.json
 
 # Include closed issues (wider view)
-uv run scripts/query-jira-cves.py --summary-contains "CVE" --no-status-filter > jira.json
+uv run .claude/skills/query-jira-cves/scripts/query-jira-cves.py --summary-contains "CVE" --no-status-filter > jira.json
 
 # Extend the date window
-uv run scripts/query-jira-cves.py --summary-contains "CVE" --since 2025-12-01 > jira.json
+uv run .claude/skills/query-jira-cves/scripts/query-jira-cves.py --summary-contains "CVE" --since 2025-12-01 > jira.json
 
 # See all options
-uv run scripts/query-jira-cves.py --help
+uv run .claude/skills/query-jira-cves/scripts/query-jira-cves.py --help
 ```
 
 ## Output
@@ -64,7 +64,7 @@ query-jira-cves → merge-cve-data
 JIRA is typically the last source collected before merging:
 
 ```bash
-uv run scripts/merge-cve-data.py \
+uv run .claude/skills/merge-cve-data/scripts/merge-cve-data.py \
   --catalog catalog.json \
   --prograde prograde-advisories.json \
   --errata errata-*.json \

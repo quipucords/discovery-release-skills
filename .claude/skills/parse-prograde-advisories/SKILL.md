@@ -22,17 +22,17 @@ retrieves the actual CVE IDs and fixed package NVRs for each advisory.
 
 ```bash
 # From stdin (piped from query-gmail)
-uv run scripts/query-gmail.py --label "alerts/prograde" --since "2026-05-01" \
-  | uv run scripts/parse-prograde-advisories.py > prograde-advisories.json
+uv run .claude/skills/query-gmail/scripts/query-gmail.py --label "alerts/prograde" --since "2026-05-01" \
+  | uv run .claude/skills/parse-prograde-advisories/scripts/parse-prograde-advisories.py > prograde-advisories.json
 
 # From a saved file
-uv run scripts/parse-prograde-advisories.py prograde-emails.json > prograde-advisories.json
+uv run .claude/skills/parse-prograde-advisories/scripts/parse-prograde-advisories.py prograde-emails.json > prograde-advisories.json
 
 # Explicitly from stdin
-cat prograde-emails.json | uv run scripts/parse-prograde-advisories.py -
+cat prograde-emails.json | uv run .claude/skills/parse-prograde-advisories/scripts/parse-prograde-advisories.py -
 
 # See all options
-uv run scripts/parse-prograde-advisories.py --help
+uv run .claude/skills/parse-prograde-advisories/scripts/parse-prograde-advisories.py --help
 ```
 
 ## Output
@@ -54,6 +54,6 @@ Extract advisory IDs for the next step:
 
 ```bash
 jq -r '.advisories[].advisory_id' prograde-advisories.json | sort -u | while read id; do
-  uv run scripts/query-errata-advisory.py "$id" > "errata-${id}.json"
+  uv run .claude/skills/query-errata-advisory/scripts/query-errata-advisory.py "$id" > "errata-${id}.json"
 done
 ```

@@ -30,16 +30,16 @@ A new upstream release will not appear here until it is published downstream.
 
 ```bash
 # Query both containers (default)
-uv run scripts/query-redhat-catalog.py > catalog.json
+uv run .claude/skills/query-redhat-catalog/scripts/query-redhat-catalog.py > catalog.json
 
 # Query only the server container
-uv run scripts/query-redhat-catalog.py --container discovery-server > catalog.json
+uv run .claude/skills/query-redhat-catalog/scripts/query-redhat-catalog.py --container discovery-server > catalog.json
 
 # Query a specific published version tag
-uv run scripts/query-redhat-catalog.py --tag 2.5.1 > catalog.json
+uv run .claude/skills/query-redhat-catalog/scripts/query-redhat-catalog.py --tag 2.5.1 > catalog.json
 
 # See all options
-uv run scripts/query-redhat-catalog.py --help
+uv run .claude/skills/query-redhat-catalog/scripts/query-redhat-catalog.py --help
 ```
 
 ## Output
@@ -58,10 +58,10 @@ query-redhat-catalog → query-errata-advisory (per advisory_id) → merge-cve-d
 Batch-query errata for all advisories found in catalog output:
 
 ```bash
-uv run scripts/query-redhat-catalog.py > catalog.json
+uv run .claude/skills/query-redhat-catalog/scripts/query-redhat-catalog.py > catalog.json
 
 jq -r '.cves[].advisory_id | select(.)' catalog.json | sort -u | while read id; do
   safe="${id//[^a-zA-Z0-9]/-}"
-  uv run scripts/query-errata-advisory.py "$id" > "errata-${safe}.json"
+  uv run .claude/skills/query-errata-advisory/scripts/query-errata-advisory.py "$id" > "errata-${safe}.json"
 done
 ```
