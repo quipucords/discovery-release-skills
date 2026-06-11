@@ -160,6 +160,13 @@ Reads `unified-cves.json` and the RPM lists; writes `cve-data/verified-cves.json
 python3 .claude/skills/verify-cves-in-builds/scripts/print-verification-summary.py
 ```
 
+**IMPORTANT:** Present the complete output of this script to the user verbatim.
+Do NOT reformat, summarize, or omit any section of it. In particular, any section
+marked `*** ACTION REQUIRED ***` contains items the user must manually verify —
+these MUST appear in your response exactly as printed, word for word. Omitting or
+paraphrasing them defeats the purpose of the check and leaves the user with an
+incomplete picture of their CVE exposure.
+
 ## Output: `cve-data/verified-cves.json`
 
 Same structure as `unified-cves.json` with two additions:

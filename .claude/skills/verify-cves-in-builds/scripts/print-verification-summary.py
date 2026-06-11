@@ -29,6 +29,26 @@ print("CVE Build Verification Report")
 print(f"  Verified at: {data.get('verified_at', 'unknown')}")
 print()
 
+# ── Skipped NVRA warning FIRST — must not be buried or omitted ───────────────
+# This section appears before all CVE detail so it cannot be missed or dropped
+# when this output is summarized. Users must manually verify these entries.
+any_skipped = {c: lines for c, lines in skipped_nvras.items() if lines}
+if any_skipped:
+    print("  *** ACTION REQUIRED — RPM entries skipped, manual verification needed ***")
+    print()
+    print("  The following RPM entries could not be parsed (missing or non-standard")
+    print("  name-version-release.arch format) and were excluded from automated CVE")
+    print("  verification. You must manually check whether any of these entries are")
+    print("  relevant to the CVEs in this report:")
+    print()
+    for container, lines in any_skipped.items():
+        print(f"    {container}:")
+        for line in lines:
+            print(f"      {line}")
+    print()
+    print("  *** END ACTION REQUIRED ***")
+    print()
+
 # ── Per-container counts ──────────────────────────────────────────────────────
 for container, image in images.items():
     s = vsummary.get(container, {})
@@ -44,8 +64,8 @@ sev_key = lambda c: -SEVERITY_ORDER.get(c.get("severity") or "Unknown", 0)
 
 # ── Per-container detail sections ────────────────────────────────────────────
 for container in images:
-    unfixed       = []
-    not_found     = []
+    unfixed        = []
+    not_found      = []
     status_unknown = []
 
     for cve in cves:
@@ -70,45 +90,32 @@ for container in images:
             entry = cve["checked_containers"][container]
             installed = ", ".join(entry.get("installed_nvras") or ["?"])
             fixed_nvr = entry.get("minimum_fixed_nvr") or "?"
-            print(f"    [{cve.get('severity', '?'):9s}] {cve['cve_id']}")
+            print(f"    [{(cve.get('severity') or '?'):9s}] {cve['cve_id']}")
             print(f"               installed: {installed}")
             print(f"               needs:     {fixed_nvr}")
         print()
 
     if not_found:
         not_found.sort(key=sev_key)
-        print(f"  {container}: {len(not_found)} CVE(s) could not be verified — "
-              f"package not found in container, check manually:")
+        print(f"  {container}: {len(not_found)} CVE(s) could not be verified —"
+              f" package not found in container, check manually:")
         for cve in not_found:
             entry = cve["checked_containers"][container]
             names = ", ".join(entry.get("searched_names") or ["?"])
-            print(f"    [{cve.get('severity', '?'):9s}] {cve['cve_id']}")
+            print(f"    [{(cve.get('severity') or '?'):9s}] {cve['cve_id']}")
             print(f"               searched for: {names}")
         print()
 
     if status_unknown:
         status_unknown.sort(key=sev_key)
-        print(f"  {container}: {len(status_unknown)} CVE(s) found in container "
-              f"but fix version unknown:")
+        print(f"  {container}: {len(status_unknown)} CVE(s) found in container"
+              f" but fix version unknown:")
         for cve in status_unknown:
             entry = cve["checked_containers"][container]
             installed = ", ".join(entry.get("installed_nvras") or ["?"])
-            print(f"    [{cve.get('severity', '?'):9s}] {cve['cve_id']}")
+            print(f"    [{(cve.get('severity') or '?'):9s}] {cve['cve_id']}")
             print(f"               installed: {installed}")
             print(f"               fixed NVR: unknown")
         print()
-
-# ── Skipped NVRA lines note ───────────────────────────────────────────────────
-any_skipped = {c: lines for c, lines in skipped_nvras.items() if lines}
-if any_skipped:
-    print("  Warning — RPM entries that could not be parsed and were skipped:")
-    for container, lines in any_skipped.items():
-        print(f"    {container}:")
-        for line in lines:
-            print(f"      {line}")
-    print(f"    These entries do not follow the standard name-version-release.arch")
-    print(f"    format and could not be included in CVE verification. Verify")
-    print(f"    independently whether any of these are relevant to your CVEs.")
-    print()
 
 print(f"Full report: cve-data/verified-cves.json")
