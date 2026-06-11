@@ -55,6 +55,13 @@ fi
 [ -n "$root" ] && cd "$root" || { echo "Error: cannot find project root"; exit 1; }
 mkdir -p cve-data
 
+# Clear stale errata files from previous runs. The primary source files
+# (catalog.json, prograde-*.json, jira.json) are overwritten by each run,
+# but errata-*.json files accumulate by advisory ID. Without this cleanup,
+# advisories no longer present in the current catalog or prograde output
+# would still be included in the merge, silently polluting the report.
+rm -f cve-data/errata-*.json cve-data/advisory-ids.txt
+
 # Check Kerberos ticket (required for query-errata-advisory in Phase 2)
 klist -s && echo "Kerberos ticket valid" || { echo "Error: no valid Kerberos ticket. Run: kinit --keychain -V <username>@YOUR_KERBEROS_REALM"; exit 1; }
 
