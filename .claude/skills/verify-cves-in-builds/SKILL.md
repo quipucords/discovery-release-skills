@@ -163,6 +163,22 @@ these MUST appear in your response exactly as printed, word for word. Omitting o
 paraphrasing them defeats the purpose of the check and leaves the user with an
 incomplete picture of their CVE exposure.
 
+### Step 4 — Generate HTML report
+
+```bash
+python3 .claude/skills/verify-cves-in-builds/scripts/generate-html-report.py
+```
+
+After this runs, explicitly tell the user:
+
+> A visual HTML report has been written to `cve-data/cve-report.html`.
+> Open it with:
+> ```
+> open cve-data/cve-report.html
+> ```
+> It contains a filterable, sortable table of all CVEs with colour-coded
+> severity and fix status, and repeats the ACTION REQUIRED items prominently.
+
 ## Output: `cve-data/verified-cves.json`
 
 Same structure as `unified-cves.json` with two additions:

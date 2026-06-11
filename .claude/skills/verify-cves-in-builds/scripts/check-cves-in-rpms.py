@@ -232,7 +232,7 @@ import time
 t0 = time.time()
 
 enriched_cves = []
-stats = {c: {"found": 0, "fixed": 0, "not_fixed": 0, "unknown": 0, "not_found": 0}
+stats = {c: {"found": 0, "fixed": 0, "not_fixed": 0, "unknown": 0, "not_found": 0, "no_package_data": 0}
          for c in checked_images}
 
 for cve in unified["cves"]:
@@ -259,6 +259,10 @@ for cve in unified["cves"]:
         elif entry["searched_names"]:
             # We knew what to look for but didn't find it
             s["not_found"] += 1
+        else:
+            # CVE affects this container but we have no RPM package data to search
+            # (may be a non-RPM dependency such as npm or Python package)
+            s["no_package_data"] += 1
 
     cve_out["checked_containers"] = checked_containers
     enriched_cves.append(cve_out)
