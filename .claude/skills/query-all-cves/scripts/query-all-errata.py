@@ -7,6 +7,7 @@ run — partial errata data is still useful for the merge step.
 """
 import subprocess
 import sys
+import time
 
 try:
     ids = [line.strip() for line in open("cve-data/advisory-ids.txt") if line.strip()]
@@ -19,7 +20,8 @@ if not ids:
     print("No advisory IDs to query.")
     sys.exit(0)
 
-print(f"Querying {len(ids)} advisory IDs in parallel...")
+print(f"Phase 2: querying {len(ids)} advisory IDs in parallel...", flush=True)
+t0 = time.time()
 
 script = ".claude/skills/query-errata-advisory/scripts/query-errata-advisory.py"
 
@@ -42,4 +44,4 @@ if failed:
     print(f"Warning: {len(failed)} errata queries failed: {', '.join(failed)}", file=sys.stderr)
 
 succeeded = len(ids) - len(failed)
-print(f"Errata phase complete: {succeeded}/{len(ids)} succeeded.")
+print(f"Phase 2 complete in {time.time() - t0:.1f}s: {succeeded}/{len(ids)} succeeded.", flush=True)

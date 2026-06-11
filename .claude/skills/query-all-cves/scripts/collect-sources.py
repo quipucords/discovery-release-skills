@@ -12,6 +12,7 @@ import datetime
 import os
 import subprocess
 import sys
+import time
 
 since = datetime.date.today() - datetime.timedelta(days=90)
 if "--since" in sys.argv:
@@ -33,13 +34,16 @@ jobs = [
      "cve-data/jira.json"),
 ]
 
+print("Phase 1: collecting from all sources in parallel...", flush=True)
+t0 = time.time()
+
 handles = []
 procs = []
 for name, cmd, outfile in jobs:
+    print(f"  Starting: {name}", flush=True)
     fh = open(outfile, "w")
     handles.append(fh)
     procs.append((name, subprocess.Popen(cmd, stdout=fh)))
-    print(f"  Started: {name}")
 
 failed = []
 for fh, (name, proc) in zip(handles, procs):
@@ -47,12 +51,12 @@ for fh, (name, proc) in zip(handles, procs):
     fh.close()
     if rc != 0:
         failed.append(name)
-        print(f"  FAILED:  {name} (exit {rc})", file=sys.stderr)
+        print(f"  FAILED:  {name} (exit {rc})", file=sys.stderr, flush=True)
     else:
-        print(f"  Done:    {name}")
+        print(f"  Done:    {name}", flush=True)
 
 if failed:
     print(f"\nError: {len(failed)} source(s) failed: {', '.join(failed)}", file=sys.stderr)
     sys.exit(1)
 
-print("\nPhase 1 complete.")
+print(f"\nPhase 1 complete in {time.time() - t0:.1f}s.", flush=True)
