@@ -102,13 +102,14 @@ def load_json(path: str, label: str) -> dict | None:
         return None
 
 
-def load_rpm_list(path: str) -> dict[str, list[dict]]:
+def load_rpm_list(path: str) -> tuple[dict[str, list[dict]], list[str]]:
     """
     Load an rpm -qa output file and index packages by name.
-    Returns dict mapping package name → list of parsed NVRA dicts.
+    Returns (index, skipped) where index maps package name → list of parsed
+    NVRA dicts, and skipped is a list of lines that could not be parsed.
     """
     index: dict[str, list[dict]] = {}
-    skipped = []
+    skipped: list[str] = []
     try:
         with open(path) as f:
             for line in f:
@@ -123,11 +124,11 @@ def load_rpm_list(path: str) -> dict[str, list[dict]]:
                     skipped.append(nvra)
     except FileNotFoundError:
         log(f"Error: RPM list not found: {path}")
-        return index
+        return index, skipped
     if skipped:
         log(f"  Skipped {len(skipped)} unparseable line(s) in {path} "
             f"(e.g. gpg-pubkey entries with no arch suffix): {', '.join(skipped[:3])}")
-    return index
+    return index, skipped
 
 
 log("Loading input files...")
@@ -139,9 +140,10 @@ if not unified or not checked_images:
     sys.exit(1)
 
 rpm_index: dict[str, dict[str, list[dict]]] = {}
+skipped_nvras: dict[str, list[str]] = {}
 for container, path in RPM_FILES.items():
     if container in checked_images:
-        rpm_index[container] = load_rpm_list(path)
+        rpm_index[container], skipped_nvras[container] = load_rpm_list(path)
         log(f"  Loaded {sum(len(v) for v in rpm_index[container].values())} packages "
             f"from {path}")
     else:
@@ -157,6 +159,7 @@ def check_cve_in_container(cve: dict, container: str) -> dict:
     result = {
         "checked_image": checked_images.get(container),
         "package_found": False,
+        "searched_names": [],
         "installed_nvras": [],
         "minimum_fixed_nvr": None,
         "is_fixed": None,
@@ -184,6 +187,8 @@ def check_cve_in_container(cve: dict, container: str) -> dict:
         if name:
             search_names.add(name)
     search_names.update(fixed_by_name.keys())
+
+    result["searched_names"] = sorted(search_names)
 
     if not search_names:
         return result
@@ -227,7 +232,7 @@ import time
 t0 = time.time()
 
 enriched_cves = []
-stats = {c: {"found": 0, "fixed": 0, "not_fixed": 0, "unknown": 0}
+stats = {c: {"found": 0, "fixed": 0, "not_fixed": 0, "unknown": 0, "not_found": 0}
          for c in checked_images}
 
 for cve in unified["cves"]:
@@ -251,6 +256,9 @@ for cve in unified["cves"]:
                 s["not_fixed"] += 1
             else:
                 s["unknown"] += 1
+        elif entry["searched_names"]:
+            # We knew what to look for but didn't find it
+            s["not_found"] += 1
 
     cve_out["checked_containers"] = checked_containers
     enriched_cves.append(cve_out)
@@ -265,6 +273,7 @@ output = {
     "verified_at": datetime.now(timezone.utc).isoformat(),
     "verification": {
         "images": dict(checked_images),
+        "skipped_nvras": skipped_nvras,
     },
     "summary": unified.get("summary", {}),
     "verification_summary": {
