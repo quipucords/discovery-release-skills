@@ -172,10 +172,10 @@ python3 .claude/skills/verify-cves-in-builds/scripts/generate-html-report.py
 After this runs, explicitly tell the user:
 
 > A visual HTML report has been written to `cve-data/cve-report.html`.
-> Open it with:
-> ```
-> open cve-data/cve-report.html
-> ```
+> Open it in a browser:
+> - macOS: `open cve-data/cve-report.html`
+> - Linux: `xdg-open cve-data/cve-report.html`
+>
 > It contains a filterable, sortable table of all CVEs with colour-coded
 > severity and fix status, and repeats the ACTION REQUIRED items prominently.
 

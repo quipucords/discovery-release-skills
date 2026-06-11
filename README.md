@@ -99,6 +99,9 @@ you can skip the Gmail step when prompted by the pipeline skill.
 # macOS
 brew install podman
 podman machine init && podman machine start
+
+# Fedora / RHEL
+sudo dnf install -y podman
 ```
 
 **Downstream images only:** `registry.redhat.io` requires authentication:
@@ -167,7 +170,7 @@ All output is written to `cve-data/` (gitignored):
 |------|----------|
 | `cve-data/unified-cves.json` | All reported CVEs with severity, advisory links, and fix data |
 | `cve-data/verified-cves.json` | Per-container verification: fixed / not fixed / UNKNOWN / not found |
-| `cve-data/cve-report.html` | Visual HTML report — open with `open cve-data/cve-report.html` |
+| `cve-data/cve-report.html` | Visual HTML report — open in a browser (`open` on macOS, `xdg-open` on Linux) |
 
 The HTML report is filterable and sortable, supports light and dark mode, and
 prominently calls out any CVEs that require manual investigation.
