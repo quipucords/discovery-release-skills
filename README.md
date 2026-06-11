@@ -75,6 +75,10 @@ These two entries cover all commands Claude runs directly:
 | `python3 .claude/skills/*` | Location check, all helper scripts, and the bulk of each pipeline |
 | `uv run .claude/skills/*` | Direct invocations of individual skill scripts |
 
+The patterns use relative paths. The skill instructions explicitly require Claude
+to use relative paths when invoking scripts — never absolute paths — so these
+tight patterns are sufficient while keeping permissions minimal.
+
 Note: commands like `klist -s`, `mkdir -p cve-data`, and `uv run` are called
 internally by the Python helper scripts via `subprocess` — not directly by Claude —
 so they do not need allowlist entries.

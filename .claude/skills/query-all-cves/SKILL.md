@@ -69,6 +69,10 @@ Once you have the answers, proceed with Step 0.
 python3 .claude/skills/check-location.py
 ```
 
+> **Always use relative paths** when invoking scripts in this skill — never
+> absolute paths. The allowlist that permits these commands matches the
+> relative form `python3 .claude/skills/...` only.
+
 Then check all credentials before doing any work — failures here are caught before
 any long-running collection begins:
 

@@ -124,6 +124,10 @@ If the user selects **Downstream**, use:
 python3 .claude/skills/check-location.py
 ```
 
+> **Always use relative paths** when invoking scripts in this skill — never
+> absolute paths. The allowlist that permits these commands matches the
+> relative form `python3 .claude/skills/...` only.
+
 ### Step 1 — Pull images and query installed RPMs (parallel)
 
 Both images are pulled and queried in parallel internally — no shell background
