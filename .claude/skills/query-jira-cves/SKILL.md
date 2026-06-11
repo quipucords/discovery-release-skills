@@ -62,5 +62,5 @@ it will mix log lines into the JSON and corrupt it.
 ## Pipeline
 
 This skill is a data source. Its output (`jira.json`) is consumed by the
-`merge-cve-data` skill, which orchestrates the full pipeline. Invoke
-`merge-cve-data` when you are ready to produce a unified CVE report.
+`query-all-cves` skill, which orchestrates the full pipeline. Invoke
+`query-all-cves` when you are ready to collect and merge all CVE data.

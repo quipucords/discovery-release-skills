@@ -44,7 +44,7 @@ installed in a real build.
 
 ## Orchestration
 
-### Step 0 — Gather options from the user
+### Step 1 — Gather options from the user
 
 Use `AskUserQuestion` to present a structured choice — do not ask via plain text
 and wait for a typed reply. This ensures a consistent, predictable UX every time
@@ -118,7 +118,7 @@ If the user selects **Downstream**, use:
 - `--server-image registry.redhat.io/discovery/discovery-server-rhel9:latest`
 - `--ui-image registry.redhat.io/discovery/discovery-ui-rhel9:latest`
 
-### Step 0 — Navigate to project root
+### Step 2 — Navigate to project root
 
 ```bash
 python3 .claude/skills/check-location.py

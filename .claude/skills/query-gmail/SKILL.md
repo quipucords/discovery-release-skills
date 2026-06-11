@@ -24,7 +24,7 @@ Also useful for any ad-hoc Gmail query during release preparation.
 ## Prerequisites
 
 1. Gmail OAuth credentials at `~/.config/gmail/credentials.json`
-   (see the project SETUP.md for one-time setup instructions)
+   (see the project README.md for one-time setup instructions)
 2. `uv` installed
 
 ## Invocation
@@ -68,4 +68,4 @@ query-jira-cves ─────────────────────�
 ```
 
 This skill is a data source. Pass its output to the `parse-prograde-advisories` skill
-as the next step. The full pipeline is orchestrated by the `merge-cve-data` skill.
+as the next step. The full pipeline is orchestrated by the `query-all-cves` skill.

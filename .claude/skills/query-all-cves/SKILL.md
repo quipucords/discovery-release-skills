@@ -38,7 +38,7 @@ All complex operations are encapsulated in helper scripts under
 `python3 script.py` call — no inline Python, no shell wildcards, no background
 job syntax. This keeps each command simple and avoids approval prompts.
 
-### Step 0 — Gather options from the user
+### Step 1 — Gather options from the user
 
 Before running anything, ask the user the following two questions. Use their
 answers to build the arguments for `collect-sources.py` in Phase 1.
@@ -61,9 +61,9 @@ specific tags instead. If yes, ask for the tag for each container separately
 (they may differ). Pass non-default tags as `--server-tag TAG` and/or
 `--ui-tag TAG` to `collect-sources.py`.
 
-Once you have the answers, proceed with Step 0.
+Once you have the answers, proceed with Step 2.
 
-### Step 0 — Navigate to project root and validate prerequisites
+### Step 2 — Navigate to project root and validate prerequisites
 
 ```bash
 python3 .claude/skills/check-location.py
@@ -92,7 +92,7 @@ Runs catalog, Gmail, and JIRA queries concurrently via `subprocess.Popen`.
 Stdout is redirected to data files inside the script — stderr always goes to
 the terminal. The `2>&1` corruption risk is eliminated.
 
-Pass the options gathered in Step 0. Omit any flag whose value is the default:
+Pass the options gathered in Step 1. Omit any flag whose value is the default:
 
 ```bash
 python3 .claude/skills/query-all-cves/scripts/collect-sources.py \
