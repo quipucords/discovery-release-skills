@@ -235,8 +235,10 @@ def query_gmail(
         return {"messages": output_messages}
 
     except Exception as e:
-        log(f"ERROR: Failed to query Gmail: {e}")
-        return {"messages": []}
+        # Re-raise so main() can catch it and exit non-zero.
+        # Returning {"messages": []} here would make network/auth failures
+        # look like "zero emails found" and silently propagate empty data.
+        raise RuntimeError(f"Failed to query Gmail: {e}") from e
 
 
 def main():

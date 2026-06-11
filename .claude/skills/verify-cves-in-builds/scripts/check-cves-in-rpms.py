@@ -68,11 +68,84 @@ def parse_evr(s: str) -> tuple[str, str, str]:
     return (epoch, s, "0")
 
 
+def rpmvercmp(a: str, b: str) -> int:
+    """Compare two RPM version or release strings using rpmvercmp algorithm.
+
+    Returns -1, 0, or 1. Handles mixed numeric/alpha segments correctly:
+    numeric segments are compared as integers (so "10" > "9"), alpha segments
+    are compared lexicographically, and numeric always beats alpha.
+    """
+    if a == b:
+        return 0
+
+    i, j = 0, 0
+    while True:
+        # Skip non-alphanumeric, non-tilde characters
+        while i < len(a) and not a[i].isalnum() and a[i] != "~":
+            i += 1
+        while j < len(b) and not b[j].isalnum() and b[j] != "~":
+            j += 1
+
+        # Tilde sorts before everything (pre-release marker)
+        a_tilde = i < len(a) and a[i] == "~"
+        b_tilde = j < len(b) and b[j] == "~"
+        if a_tilde or b_tilde:
+            if not a_tilde:
+                return 1
+            if not b_tilde:
+                return -1
+            i += 1
+            j += 1
+            continue
+
+        if i >= len(a) and j >= len(b):
+            return 0
+        if i >= len(a):
+            return -1
+        if j >= len(b):
+            return 1
+
+        if a[i].isdigit():
+            # Numeric segment — numeric always beats alpha
+            i0, j0 = i, j
+            while i < len(a) and a[i].isdigit():
+                i += 1
+            while j < len(b) and b[j].isdigit():
+                j += 1
+            if j0 < len(b) and not b[j0].isdigit():
+                return 1  # numeric > alpha
+            na, nb = int(a[i0:i]), int(b[j0:j])
+            if na != nb:
+                return -1 if na < nb else 1
+        else:
+            # Alpha segment
+            i0, j0 = i, j
+            while i < len(a) and a[i].isalpha():
+                i += 1
+            while j < len(b) and b[j].isalpha():
+                j += 1
+            if j0 < len(b) and b[j0].isdigit():
+                return -1  # alpha < numeric
+            sa, sb = a[i0:i], b[j0:j]
+            if sa != sb:
+                return -1 if sa < sb else 1
+
+
 def evr_gte(installed_vr: str, fixed_nvr: str) -> bool:
-    """Return True if installed version-release >= fixed NVR (package name stripped)."""
+    """Return True if installed version-release >= fixed NVR using rpmvercmp semantics."""
     installed_evr = parse_evr(installed_vr)
     fixed_evr = parse_evr(fixed_nvr)
-    return installed_evr >= fixed_evr
+
+    # Compare epoch as integers
+    ei, ef = int(installed_evr[0]), int(fixed_evr[0])
+    if ei != ef:
+        return ei >= ef
+
+    # Compare version, then release using rpmvercmp
+    cmp = rpmvercmp(installed_evr[1], fixed_evr[1])
+    if cmp != 0:
+        return cmp > 0
+    return rpmvercmp(installed_evr[2], fixed_evr[2]) >= 0
 
 
 def package_name_from_entry(entry: dict) -> str | None:
