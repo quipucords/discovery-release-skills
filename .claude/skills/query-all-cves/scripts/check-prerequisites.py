@@ -19,7 +19,7 @@ result = subprocess.run(["klist", "-s"], capture_output=True)
 if result.returncode != 0:
     errors.append(
         "No valid Kerberos ticket.\n"
-        "  Fix: kinit --keychain -V <username>@YOUR_KERBEROS_REALM"
+        "  Fix: kinit <username>@YOUR_KERBEROS_REALM"
     )
 
 if not os.environ.get("JIRA_EMAIL"):

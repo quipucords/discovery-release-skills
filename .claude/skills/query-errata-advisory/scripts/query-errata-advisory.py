@@ -102,7 +102,7 @@ def query_advisory(advisory_id: str) -> dict:
                     "error": "Authentication failed - response is HTML, not JSON. Check Kerberos ticket.",
                     "advisory_id": advisory_id,
                     "url": api_url,
-                    "hint": "Run: kinit --keychain -V <username>@YOUR_KERBEROS_REALM"
+                    "hint": "Run: kinit <username>@YOUR_KERBEROS_REALM"
                 }
             return {
                 "error": "Failed to parse JSON response",
@@ -221,7 +221,7 @@ def query_advisory_builds(advisory_id: str) -> dict:
                 return {
                     "error": "Authentication failed - response is HTML, not JSON. Check Kerberos ticket.",
                     "url": url,
-                    "hint": "Run: kinit --keychain -V <username>@YOUR_KERBEROS_REALM"
+                    "hint": "Run: kinit <username>@YOUR_KERBEROS_REALM"
                 }
             return {
                 "error": "Failed to parse JSON response",
@@ -328,7 +328,7 @@ AUTHENTICATION:
   Requires valid Kerberos ticket for @YOUR_KERBEROS_REALM principal.
 
   To authenticate:
-    kinit --keychain -V <username>@YOUR_KERBEROS_REALM
+    kinit <username>@YOUR_KERBEROS_REALM
 
   To check ticket status:
     klist -s
@@ -451,7 +451,7 @@ NOTE:
     # Check for Kerberos ticket
     if not check_kerberos_ticket():
         log("WARNING: No valid Kerberos ticket found.")
-        log("         Run: kinit --keychain -V <username>@YOUR_KERBEROS_REALM")
+        log("         Run: kinit <username>@YOUR_KERBEROS_REALM")
         log("         Continuing anyway - API may return authentication error.")
         log("")
 

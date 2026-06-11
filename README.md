@@ -70,7 +70,7 @@ handle orchestration.
 The errata advisory lookup requires a valid Kerberos ticket from the Red Hat
 internal network:
 ```bash
-kinit --keychain -V <username>@YOUR_KERBEROS_REALM   # macOS keychain
+kinit <username>@YOUR_KERBEROS_REALM
 klist -s && echo "ticket valid" || echo "need to kinit"
 ```
 

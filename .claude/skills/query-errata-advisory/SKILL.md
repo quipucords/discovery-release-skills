@@ -30,7 +30,7 @@ All formats are accepted: `165721`, `RHSA-165721`, `RHSA-2026:6923`.
 
 Valid Kerberos ticket:
 ```bash
-kinit --keychain -V <username>@YOUR_KERBEROS_REALM  # macOS keychain
+kinit <username>@YOUR_KERBEROS_REALM
 klist -s && echo "ticket valid" || echo "need to kinit"
 ```
 
