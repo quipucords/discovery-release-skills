@@ -37,16 +37,7 @@ klist -s && echo "ticket valid" || echo "need to kinit"
 ## Invocation
 
 ```bash
-root=$(git rev-parse --show-toplevel 2>/dev/null)
-if [ -z "$root" ]; then
-  d=$PWD
-  while [ "$d" != "/" ]; do
-    [ -d "$d/.claude/skills" ] && root=$d && break
-    d=$(dirname "$d")
-  done
-fi
-[ -n "$root" ] && cd "$root" || { echo "Error: cannot find project root"; exit 1; }
-mkdir -p cve-data
+python3 .claude/skills/check-location.py
 
 # Query by numeric ID (from prograde)
 uv run .claude/skills/query-errata-advisory/scripts/query-errata-advisory.py 165721 > cve-data/errata-165721.json

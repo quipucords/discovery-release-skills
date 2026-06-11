@@ -68,18 +68,18 @@ list in `.claude/settings.local.json`:
 }
 ```
 
-These two entries cover virtually all commands Claude runs directly:
+These two entries cover all commands Claude runs directly:
 
 | Pattern | What it allows |
 |---------|---------------|
-| `python3 .claude/skills/*` | All `query-all-cves` helper scripts (the bulk of the pipeline) |
+| `python3 .claude/skills/*` | Location check, all helper scripts, and the bulk of each pipeline |
 | `uv run .claude/skills/*` | Direct invocations of individual skill scripts |
 
 Note: commands like `klist -s`, `mkdir -p cve-data`, and `uv run` are called
 internally by the Python helper scripts via `subprocess` — not directly by Claude —
 so they do not need allowlist entries.
 
-**One prompt remains:** each skill's invocation section begins with a root-finding
-bash block that contains conditional logic and `cd`. This compound statement cannot
-be practically expressed as a single allowlist pattern, so it will still require a
-one-time approval at the start of each skill run.
+**Happy path — zero approval prompts:** all skill invocations begin with
+`python3 .claude/skills/check-location.py`, which verifies the working directory
+and is covered by the `python3 .claude/skills/*` allowlist entry. As long as you
+invoke skills from the project root directory, no approval prompts should appear.

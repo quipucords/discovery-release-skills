@@ -31,16 +31,7 @@ project README for details.
 ## Invocation
 
 ```bash
-root=$(git rev-parse --show-toplevel 2>/dev/null)
-if [ -z "$root" ]; then
-  d=$PWD
-  while [ "$d" != "/" ]; do
-    [ -d "$d/.claude/skills" ] && root=$d && break
-    d=$(dirname "$d")
-  done
-fi
-[ -n "$root" ] && cd "$root" || { echo "Error: cannot find project root"; exit 1; }
-mkdir -p cve-data
+python3 .claude/skills/check-location.py
 
 # Search for open CVE issues (default: excludes Done/Closed, last 90 days)
 uv run .claude/skills/query-jira-cves/scripts/query-jira-cves.py --summary-contains "CVE" > cve-data/jira.json

@@ -60,16 +60,7 @@ Once you have the answers, proceed with Step 0.
 ### Step 0 — Navigate to project root and validate prerequisites
 
 ```bash
-root=$(git rev-parse --show-toplevel 2>/dev/null)
-if [ -z "$root" ]; then
-  d=$PWD
-  while [ "$d" != "/" ]; do
-    [ -d "$d/.claude/skills" ] && root=$d && break
-    d=$(dirname "$d")
-  done
-fi
-[ -n "$root" ] && cd "$root" || { echo "Error: cannot find project root"; exit 1; }
-mkdir -p cve-data
+python3 .claude/skills/check-location.py
 ```
 
 Then check all credentials before doing any work — failures here are caught before
