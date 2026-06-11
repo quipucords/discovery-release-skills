@@ -53,12 +53,11 @@ fi
 mkdir -p cve-data
 ```
 
-Then check credentials before doing any work — a missing Kerberos ticket or JIRA
-token will fail in Phase 2 after all of Phase 1 has already run:
+Then check all credentials before doing any work — failures here are caught before
+any long-running collection begins:
 
 ```bash
-klist -s || { echo "Error: no valid Kerberos ticket. Run: kinit --keychain -V <username>@YOUR_KERBEROS_REALM"; exit 1; }
-[ -n "$JIRA_EMAIL" ] && [ -n "$JIRA_API_TOKEN" ] || { echo "Error: JIRA_EMAIL and JIRA_API_TOKEN not set — see project README"; exit 1; }
+python3 .claude/skills/query-all-cves/scripts/check-prerequisites.py
 ```
 
 ### Step 1 — Clean stale errata files
