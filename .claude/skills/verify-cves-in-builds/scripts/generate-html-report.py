@@ -205,6 +205,7 @@ CSS = """
     text-overflow: ellipsis;
   }
   .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+  .stat-grid-single { grid-template-columns: 1fr; }
   .stat {
     text-align: center;
     padding: 0.5rem;
@@ -588,7 +589,7 @@ def comparison_summary_cards_html(data: dict) -> str:
         parts.append(f"""
     <div class="card">
       <div class="card-title">{label}</div>
-      <div class="stat-grid" style="grid-template-columns: 1fr;">
+      <div class="stat-grid stat-grid-single">
         <div class="stat {css}">
           <span class="stat-n">{n}</span>
           <span class="stat-l">CVEs</span>
