@@ -672,24 +672,24 @@ def comparison_action_required_html(cves: list) -> str:
         tier1_parts.append("<h3>🚨 Upstream regression — fixed downstream but NOT in upstream</h3>")
         tier1_parts.append(
             "<p>The downstream Discovery release contains these fixes, but they have been lost "
-            "from the upstream quipucords codebase. This is unexpected. Find and restore the "
+            "from the upstream quipucords codebase. This is unexpected! Find and restore the "
             "fix in the upstream quipucords project immediately.</p>"
         )
         tier1_parts.append(cve_list_html(group))
 
     group = sorted(by_delta.get("not_fixed_in_either", []), key=sev_sort)
     if group:
-        tier1_parts.append("<h3>Not fixed anywhere — develop the fix upstream</h3>")
+        tier1_parts.append("<h3>‼️ Not fixed anywhere — develop the fix upstream</h3>")
         tier1_parts.append(
             "<p>No fix exists yet in either the upstream quipucords build or the downstream "
             "Discovery release. Develop and merge the fix into the upstream quipucords project "
-            "first; a downstream release will then pick it up.</p>"
+            "first; then prepare to include it in a downstream release.</p>"
         )
         tier1_parts.append(cve_list_html(group))
 
     group = sorted(by_delta.get("unknown", []), key=sev_sort)
     if group:
-        tier1_parts.append("<h3>UNKNOWN — manual verification needed</h3>")
+        tier1_parts.append("<h3>⁉️ UNKNOWN — manual verification needed</h3>")
         tier1_parts.append(
             "<p>No RPM package data is available. The vulnerable component may be a non-RPM "
             "dependency (e.g. npm, Python). <strong>Investigate each CVE manually.</strong></p>"
@@ -699,7 +699,7 @@ def comparison_action_required_html(cves: list) -> str:
     if tier1_parts:
         result += (
             '<div class="action-required">'
-            '<h2>⚠ Action Required — Upstream code changes needed</h2>'
+            '<h2>⚠️ Action Required — Upstream code changes needed</h2>'
             + "\n".join(tier1_parts)
             + "</div>\n"
         )
@@ -712,8 +712,8 @@ def comparison_action_required_html(cves: list) -> str:
             "<h2>📦 Release Needed — No code changes required</h2>"
             "<h3>Fixed upstream, pending downstream release</h3>"
             "<p>These fixes have been merged to the upstream quipucords codebase. "
-            "No further code changes are needed. Cut a new downstream Discovery release "
-            "to ship them. This is the normal release workflow.</p>"
+            "No further upstream changes are needed. Cut a new downstream Discovery release "
+            "to ship them.</p>"
             + cve_list_html(group)
             + "</div>\n"
         )
@@ -772,8 +772,8 @@ if mode == "comparison":
         <tr>
           <th data-col="0" rowspan="2" onclick="sortTable(0)">CVE ID</th>
           <th data-col="1" rowspan="2" onclick="sortTable(1)">Severity</th>
-          <th colspan="2" class="col-group col-group-downstream">Downstream</th>
-          <th colspan="2" class="col-group col-group-upstream">Upstream</th>
+          <th colspan="2" class="col-group col-group-downstream">Discovery</th>
+          <th colspan="2" class="col-group col-group-upstream">quipucords</th>
           <th data-col="6" rowspan="2" onclick="sortTable(6)">Delta</th>
         </tr>
         <tr>
