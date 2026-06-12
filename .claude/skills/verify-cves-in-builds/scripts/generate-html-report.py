@@ -269,6 +269,7 @@ CSS = """
   .action-required li { margin: 0.3rem 0; }
   .action-required a  { color: var(--action-link); }
   .cve-pkg { opacity: 0.65; font-style: italic; }
+  .col-pkg { font-size: 0.8rem; color: var(--muted); max-width: 14rem; word-break: break-word; }
 
   /* ── Pending-release banner (tier 2 — just cut a release) ────────────── */
   .action-release {
@@ -465,10 +466,13 @@ def make_comparison_rows(cves: list) -> str:
         delta    = cve.get("delta", "unknown")
         ds       = cve.get("downstream", {})
         us       = cve.get("upstream", {})
+        pkg_names = cve.get("package_names", [])
+        pkg_cell  = escape(", ".join(pkg_names)) if pkg_names else ""
         parts.append(
             f'<tr data-delta="{delta}" data-severity="{severity}">'
             f'<td><a href="{escape(cve_link)}" target="_blank">{escape(cve_id)}</a></td>'
             f'<td>{sev_badge(severity)}</td>'
+            f'<td class="col-pkg">{pkg_cell}</td>'
             f'<td>{status_cell(ds.get(SERVER_CONTAINER))}</td>'
             f'<td>{status_cell(ds.get(UI_CONTAINER))}</td>'
             f'<td>{status_cell(us.get(SERVER_CONTAINER))}</td>'
@@ -785,15 +789,16 @@ if mode == "comparison":
         <tr>
           <th data-col="0" rowspan="2" onclick="sortTable(0)">CVE ID</th>
           <th data-col="1" rowspan="2" onclick="sortTable(1)">Severity</th>
+          <th data-col="2" rowspan="2" onclick="sortTable(2)">Package(s)</th>
           <th colspan="2" class="col-group col-group-downstream">Discovery</th>
           <th colspan="2" class="col-group col-group-upstream">quipucords</th>
-          <th data-col="6" rowspan="2" onclick="sortTable(6)">Delta</th>
+          <th data-col="7" rowspan="2" onclick="sortTable(7)">Delta</th>
         </tr>
         <tr>
-          <th data-col="2" onclick="sortTable(2)">Server</th>
-          <th data-col="3" onclick="sortTable(3)">UI</th>
-          <th data-col="4" onclick="sortTable(4)">Server</th>
-          <th data-col="5" onclick="sortTable(5)">UI</th>
+          <th data-col="3" onclick="sortTable(3)">Server</th>
+          <th data-col="4" onclick="sortTable(4)">UI</th>
+          <th data-col="5" onclick="sortTable(5)">Server</th>
+          <th data-col="6" onclick="sortTable(6)">UI</th>
         </tr>"""
     tbody_html    = make_comparison_rows(cves)
     data_ref      = "cve-data/comparison.json"
