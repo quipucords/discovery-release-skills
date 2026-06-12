@@ -114,6 +114,10 @@ CSS = """
     --delta-release:       #2563eb;
     --delta-unknown:       #b45309;
     --delta-fixed-both:    #16a34a;
+
+    /* Comparison table column group headers */
+    --col-ds: #1d4ed8;
+    --col-us: #15803d;
   }
 
   /* ── Dark mode overrides ─────────────────────────────────────────────── */
@@ -165,6 +169,9 @@ CSS = """
       --delta-release:       #60a5fa;
       --delta-unknown:       #f59e0b;
       --delta-fixed-both:    #22c55e;
+
+      --col-ds: #60a5fa;
+      --col-us: #4ade80;
     }
   }
 
@@ -290,6 +297,10 @@ CSS = """
     white-space: nowrap;
   }
   thead th:hover { background: var(--border); }
+  thead th.col-group { text-align: center; cursor: default; letter-spacing: 0.08em; }
+  thead th.col-group:hover { background: var(--surface-alt); }
+  thead th.col-group-downstream { border-bottom: 3px solid var(--col-ds); color: var(--col-ds); }
+  thead th.col-group-upstream   { border-bottom: 3px solid var(--col-us); color: var(--col-us); }
   thead th.sorted-asc::after  { content: " ↑"; }
   thead th.sorted-desc::after { content: " ↓"; }
   tbody tr { border-top: 1px solid var(--border-subtle); transition: background 0.1s; }
@@ -737,13 +748,17 @@ if mode == "comparison":
     <span class="row-count" id="row-count"></span>"""
     thead_html    = """
         <tr>
-          <th onclick="sortTable(0)">CVE ID</th>
-          <th onclick="sortTable(1)">Severity</th>
-          <th onclick="sortTable(2)">Server ↓</th>
-          <th onclick="sortTable(3)">UI ↓</th>
-          <th onclick="sortTable(4)">Server ↑</th>
-          <th onclick="sortTable(5)">UI ↑</th>
-          <th onclick="sortTable(6)">Delta</th>
+          <th data-col="0" rowspan="2" onclick="sortTable(0)">CVE ID</th>
+          <th data-col="1" rowspan="2" onclick="sortTable(1)">Severity</th>
+          <th colspan="2" class="col-group col-group-downstream">Downstream</th>
+          <th colspan="2" class="col-group col-group-upstream">Upstream</th>
+          <th data-col="6" rowspan="2" onclick="sortTable(6)">Delta</th>
+        </tr>
+        <tr>
+          <th data-col="2" onclick="sortTable(2)">Server</th>
+          <th data-col="3" onclick="sortTable(3)">UI</th>
+          <th data-col="4" onclick="sortTable(4)">Server</th>
+          <th data-col="5" onclick="sortTable(5)">UI</th>
         </tr>"""
     tbody_html    = make_comparison_rows(cves)
     data_ref      = "cve-data/comparison.json"
@@ -816,12 +831,12 @@ else:  # single-set mode
     <span class="row-count" id="row-count"></span>"""
     thead_html       = """
         <tr>
-          <th onclick="sortTable(0)">CVE ID</th>
-          <th onclick="sortTable(1)">Severity</th>
-          <th onclick="sortTable(2)">Container</th>
-          <th onclick="sortTable(3)">Status</th>
-          <th onclick="sortTable(4)">Installed</th>
-          <th onclick="sortTable(5)">Minimum Fixed</th>
+          <th data-col="0" onclick="sortTable(0)">CVE ID</th>
+          <th data-col="1" onclick="sortTable(1)">Severity</th>
+          <th data-col="2" onclick="sortTable(2)">Container</th>
+          <th data-col="3" onclick="sortTable(3)">Status</th>
+          <th data-col="4" onclick="sortTable(4)">Installed</th>
+          <th data-col="5" onclick="sortTable(5)">Minimum Fixed</th>
         </tr>"""
     tbody_html       = table_rows_html()
     data_ref         = "cve-data/verified-cves-downstream.json"
@@ -903,12 +918,12 @@ function applyFilters() {{
 }}
 
 function sortTable(col) {{
-  const ths = document.querySelectorAll('thead th');
+  const ths = document.querySelectorAll('thead th[data-col]');
   if (sortCol === col) {{ sortAsc = !sortAsc; }}
   else {{ sortCol = col; sortAsc = true; }}
-  ths.forEach((th, i) => {{
+  ths.forEach(th => {{
     th.classList.remove('sorted-asc', 'sorted-desc');
-    if (i === col) th.classList.add(sortAsc ? 'sorted-asc' : 'sorted-desc');
+    if (parseInt(th.dataset.col) === col) th.classList.add(sortAsc ? 'sorted-asc' : 'sorted-desc');
   }});
   const rows = Array.from(tbody.rows);
   rows.sort((a, b) => {{
