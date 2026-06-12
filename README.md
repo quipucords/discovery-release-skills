@@ -16,16 +16,15 @@ see [Quick Start](#quick-start) to run your first report.
 
 ## Prerequisites
 
-### Required for all skills
+### Claude Code and uv
+
 - **Claude Code** — [install instructions](https://claude.ai/download)
 - **`uv`** — Python package runner used by all scripts:
   ```bash
   curl -LsSf https://astral.sh/uv/install.sh | sh
   ```
 
-### Required for `/query-all-cves` and `/run-cve-check-pipeline`
-
-#### Red Hat Errata API (Kerberos)
+### Kerberos ticket
 
 The errata advisory lookup requires a valid Kerberos ticket. You must be on the
 Red Hat internal network or connected via VPN:
@@ -34,17 +33,17 @@ kinit <username>@YOUR_KERBEROS_REALM
 klist -s && echo "ticket valid" || echo "need to kinit"
 ```
 
-#### JIRA API token *(if querying JIRA)*
+### JIRA API token
 
 The skill connects to `redhat.atlassian.net`. Create an API token at
 [id.atlassian.com](https://id.atlassian.com/manage-profile/security/api-tokens)
-and set it as environment variables — see [Setup](#setup) below.
+and set it as an environment variable — see [Setup](#setup) below.
 
 > **Note on JIRA token scopes:** Use an API token with sufficient read permissions.
 > Tokens with insufficient scopes silently return 0 results rather than an error,
 > making it look like there are no open CVE issues.
 
-#### Gmail OAuth credentials *(if querying Prograde emails)*
+### Gmail OAuth credentials
 
 OAuth credentials are required to read Gmail. On the first run, a browser window
 opens for authorization. Place your credentials file at:
@@ -55,9 +54,7 @@ See the [Gmail API Quickstart](https://developers.google.com/gmail/api/quickstar
 for how to obtain credentials. If you don't receive Prograde advisory emails,
 see [Team collaboration](#team-collaboration-sharing-prograde-data) below.
 
-### Required for `/verify-cves-in-builds` and `/run-cve-check-pipeline`
-
-#### podman
+### podman
 
 Used to pull and inspect container images:
 
@@ -77,7 +74,7 @@ podman machine init && podman machine start
 sudo dnf install -y podman
 ```
 
-**Downstream images** (`registry.redhat.io`) require authentication:
+Downstream images (`registry.redhat.io`) require authentication:
 ```bash
 podman login registry.redhat.io   # Red Hat Customer Portal credentials
 ```
