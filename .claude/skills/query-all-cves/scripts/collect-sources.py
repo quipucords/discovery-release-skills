@@ -24,6 +24,11 @@ Usage:
   --skip-gmail          Skip the Gmail/Prograde query entirely. Writes an empty
                         prograde-emails.json so downstream steps run unchanged.
                         Use when Prograde emails are unavailable or unwanted.
+  --use-provided-prograde
+                        Skip the Gmail query but read cve-data/prograde-emails.json
+                        from disk as-is. Use when a teammate has already exported
+                        the file and transferred it to you. Exits non-zero if the
+                        file is missing or empty.
 
   When --server-tag or --ui-tag are provided, the catalog is queried once per
   container and the results are merged into cve-data/catalog.json.
@@ -42,7 +47,12 @@ parser.add_argument("--since-last-release", action="store_true", default=False)
 parser.add_argument("--server-tag", default=None)
 parser.add_argument("--ui-tag", default=None)
 parser.add_argument("--skip-gmail", action="store_true", default=False)
+parser.add_argument("--use-provided-prograde", action="store_true", default=False)
 args = parser.parse_args()
+
+if args.skip_gmail and args.use_provided_prograde:
+    print("Error: --skip-gmail and --use-provided-prograde are mutually exclusive.", file=sys.stderr)
+    sys.exit(1)
 
 if args.since and args.since_last_release:
     print("Error: --since and --since-last-release are mutually exclusive.", file=sys.stderr)
@@ -105,6 +115,26 @@ if args.skip_gmail:
     print("  Skipping Gmail/Prograde (--skip-gmail set).", flush=True)
     with open("cve-data/prograde-emails.json", "w") as f:
         json.dump({"messages": []}, f)
+    parallel_jobs = [
+        ("jira", ["uv", "run", f"{skills}/query-jira-cves/scripts/query-jira-cves.py",
+                  "--summary-contains", "CVE"],
+         "cve-data/jira.json"),
+    ]
+elif args.use_provided_prograde:
+    prograde_path = "cve-data/prograde-emails.json"
+    if not os.path.exists(prograde_path):
+        print(f"Error: --use-provided-prograde set but {prograde_path} not found.\n"
+              "Ask a teammate who receives Prograde emails to export it for you.",
+              file=sys.stderr)
+        sys.exit(1)
+    with open(prograde_path) as f:
+        data = json.load(f)
+    if not data.get("messages"):
+        print(f"Error: {prograde_path} exists but contains no messages.\n"
+              "Ask a teammate to re-export it with at least one Prograde email.",
+              file=sys.stderr)
+        sys.exit(1)
+    print(f"  Using provided prograde-emails.json ({len(data['messages'])} messages).", flush=True)
     parallel_jobs = [
         ("jira", ["uv", "run", f"{skills}/query-jira-cves/scripts/query-jira-cves.py",
                   "--summary-contains", "CVE"],

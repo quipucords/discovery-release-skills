@@ -112,6 +112,53 @@ Upstream images (`quay.io/quipucords`) are public and do not require login. In u
 
 ---
 
+## Team collaboration: sharing Prograde data
+
+Prograde CVE advisory emails are only delivered to a subset of team members. If
+you don't receive them, you can still get a complete CVE report — you just need a
+teammate to export the raw email data and share it with you.
+
+### Step 1 — Teammate exports the file
+
+The teammate who receives Prograde emails runs the Gmail query step directly:
+
+```bash
+uv run .claude/skills/query-gmail/scripts/query-gmail.py \
+  --label alerts/prograde \
+  --since 2025-01-01 \
+  > cve-data/prograde-emails.json
+```
+
+Replace `2025-01-01` with the date range you want to cover (typically the date
+of the last downstream Discovery release). The output is a plain JSON file with
+no secrets or credentials — it is safe to share over Slack or email.
+
+### Step 2 — You receive the file
+
+Place the file your teammate sent you at `cve-data/prograde-emails.json` inside
+this project directory. Create `cve-data/` first if it doesn't exist:
+
+```bash
+mkdir -p cve-data
+# then copy or move the file here
+```
+
+### Step 3 — Run the pipeline using the provided file
+
+When prompted by `/run-cve-check-pipeline`, choose:
+
+> **No — use provided json file**
+
+The pipeline will skip the Gmail query and read `cve-data/prograde-emails.json`
+directly. All subsequent steps (parsing, errata lookups, merging) run normally,
+so the resulting report is just as complete as if you had Gmail access.
+
+> **Note:** If you accidentally select "No — skip Prograde" instead, the
+> pipeline will overwrite your file with an empty stub. Re-copy the file from
+> your teammate before running again.
+
+---
+
 ## Setup
 
 ### 1. Set JIRA credentials

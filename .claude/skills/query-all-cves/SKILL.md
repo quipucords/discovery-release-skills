@@ -54,6 +54,7 @@ Options to present:
 - **Since last downstream release** — query catalog for when the latest discovery images were published, use that date; pass `--since-last-release`
 - **Last 90 days (default)** — query Gmail for Prograde emails from the last 90 days
 - **Custom date** — query Gmail from a specific date (ask for the date)
+- **Use provided json file** — skip Gmail but read `cve-data/prograde-emails.json` from disk; pass `--use-provided-prograde`. Use when a teammate has already exported the file.
 - **Skip Prograde emails** — omit Gmail entirely; use `--skip-gmail` flag
 
 **Question 2 — Red Hat Catalog image tags:**
