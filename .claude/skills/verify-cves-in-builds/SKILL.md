@@ -230,7 +230,7 @@ After this runs, explicitly tell the user:
 > status columns side by side, a Delta column (e.g. "Backport needed"), and
 > an ACTION REQUIRED section listing CVEs that need attention.
 
-## Output: `cve-data/verified-cves.json`
+## Output: `cve-data/verified-cves-downstream.json` (single-set) / `cve-data/comparison.json` (comparison)
 
 Same structure as `unified-cves.json` with two additions:
 
@@ -276,14 +276,14 @@ Same structure as `unified-cves.json` with two additions:
 jq '.cves[] | select(.checked_containers["discovery/discovery-server-rhel9"].is_fixed == false)
   | {cve_id, severity, installed: .checked_containers["discovery/discovery-server-rhel9"].installed_nvras,
      needs: .checked_containers["discovery/discovery-server-rhel9"].minimum_fixed_nvr}' \
-  cve-data/verified-cves.json
+  cve-data/verified-cves-downstream.json
 
 # Count by fix status for each container
-jq '.verification_summary' cve-data/verified-cves.json
+jq '.verification_summary' cve-data/verified-cves-downstream.json
 
 # CVEs where fix is unknown (package not found or no fix NVR available)
 jq '.cves[] | select(.checked_containers | to_entries[] | .value.is_fixed == null)
-  | .cve_id' cve-data/verified-cves.json
+  | .cve_id' cve-data/verified-cves-downstream.json
 ```
 
 ## Pipeline
@@ -291,5 +291,5 @@ jq '.cves[] | select(.checked_containers | to_entries[] | .value.is_fixed == nul
 ```
 query-all-cves → cve-data/unified-cves.json
                          ↓
-verify-cves-in-builds → cve-data/verified-cves.json
+verify-cves-in-builds → cve-data/verified-cves-downstream.json (or comparison.json in compare mode)
 ```

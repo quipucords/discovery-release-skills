@@ -2,17 +2,18 @@
 """Compare CVE fix data against installed RPMs in pulled container images.
 
 Reads:
-  cve-data/unified-cves.json   — CVE records with vulnerable_packages + fixed_packages
-  cve-data/rpms-server.txt     — rpm -qa output from discovery-server image
-  cve-data/rpms-ui.txt         — rpm -qa output from discovery-ui image
-  cve-data/checked-images.json — mapping of container name → image URL checked
+  cve-data/unified-cves.json              — CVE records with vulnerable_packages + fixed_packages
+  cve-data/rpms-server-{set}.txt          — rpm -qa output from discovery-server image
+  cve-data/rpms-ui-{set}.txt              — rpm -qa output from discovery-ui image
+  cve-data/checked-images-{set}.json      — mapping of container name → image URL checked
+  (where {set} is "downstream" or "upstream", from the --set argument)
 
 Writes:
-  cve-data/verified-cves.json  — unified-cves.json enriched with checked_containers
-                                  per CVE, showing what was found and whether it's fixed
+  cve-data/verified-cves-{set}.json       — unified-cves.json enriched with checked_containers
+                                             per CVE, showing what was found and whether it's fixed
 
 All progress messages go to stderr. This script produces no stdout output
-(results are written to cve-data/verified-cves.json). Exits non-zero on failure.
+(results are written to cve-data/verified-cves-{set}.json). Exits non-zero on failure.
 """
 import argparse
 import json
@@ -231,7 +232,7 @@ for container, path in RPM_FILES.items():
         log(f"  Loaded {sum(len(v) for v in rpm_index[container].values())} packages "
             f"from {path}")
     else:
-        log(f"  Skipping {container}: not in checked-images.json (was not pulled)")
+        log(f"  Skipping {container}: not in checked-images-{set_name}.json (was not pulled)")
 
 
 # ── Check each CVE against container RPM lists ───────────────────────────────
