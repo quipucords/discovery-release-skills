@@ -25,16 +25,17 @@ see [Quick Start](#quick-start) to run your first report.
 ### Required for `/query-all-cves` and `/run-cve-check-pipeline`
 
 **Red Hat Errata API (Kerberos)**
-The errata advisory lookup requires a valid Kerberos ticket from the Red Hat
-internal network:
+The errata advisory lookup requires a valid Kerberos ticket. You must be on the
+Red Hat internal network or connected via VPN:
 ```bash
 kinit <username>@YOUR_KERBEROS_REALM
 klist -s && echo "ticket valid" || echo "need to kinit"
 ```
 
 **JIRA API token** *(if querying JIRA)*
-Create a token at [id.atlassian.com](https://id.atlassian.com/manage-profile/security/api-tokens).
-Set as environment variables — see [Setup](#setup) below.
+The skill connects to `redhat.atlassian.net`. Create an API token at
+[id.atlassian.com](https://id.atlassian.com/manage-profile/security/api-tokens)
+and set it as environment variables — see [Setup](#setup) below.
 
 > **Note on JIRA token scopes:** Use an API token with sufficient read permissions.
 > Tokens with insufficient scopes silently return 0 results rather than an error,
@@ -57,7 +58,14 @@ see [Team collaboration](#team-collaboration-sharing-prograde-data) below.
 # macOS
 brew install podman
 podman machine init && podman machine start
+```
 
+> **macOS note:** The podman machine does not start automatically after a
+> reboot. Run `podman machine start` at the beginning of each session, or
+> configure it to start on login with `podman machine start --no-info` in your
+> shell profile.
+
+```bash
 # Fedora / RHEL
 sudo dnf install -y podman
 ```
@@ -66,7 +74,9 @@ sudo dnf install -y podman
 ```bash
 podman login registry.redhat.io   # Red Hat Customer Portal credentials
 ```
-Upstream images (`quay.io/quipucords`) are public and do not require login. In upstream-only mode the login check is skipped automatically.
+
+Upstream images (`quay.io/quipucords`) are public — no login required. In
+upstream-only mode the login check is skipped automatically.
 
 ---
 
@@ -128,10 +138,11 @@ The fastest way to get a complete CVE status report is:
 /run-cve-check-pipeline
 ```
 
-This single command runs the full pipeline end-to-end — collecting CVE data from
-all configured sources, verifying which CVEs are fixed or still present in the
-container builds, and producing both a machine-readable JSON report and a visual
-HTML report you can open in a browser.
+This runs the full pipeline end-to-end — querying all configured sources (Red Hat
+Catalog, Prograde emails, JIRA, and Errata), verifying which CVEs are fixed or
+still present in the container builds, and writing a visual HTML report to
+`cve-data/cve-report.html`. Open it with `open cve-data/cve-report.html` on
+macOS or `xdg-open cve-data/cve-report.html` on Linux.
 
 ---
 
@@ -140,6 +151,10 @@ HTML report you can open in a browser.
 Prograde CVE advisory emails are only delivered to a subset of team members. If
 you don't receive them, you can still get a complete CVE report — you just need a
 teammate to export the raw email data and share it with you.
+
+> **Prerequisites for the recipient:** You still need a valid Kerberos ticket
+> (see [Prerequisites](#prerequisites)) and JIRA credentials (see [Setup](#setup))
+> to run the full pipeline. Only the Gmail step is handled by the shared file.
 
 ### Step 1 — Teammate exports the file
 
@@ -152,9 +167,9 @@ uv run .claude/skills/query-gmail/scripts/query-gmail.py \
   > cve-data/prograde-emails.json
 ```
 
-Replace `2025-01-01` with the date range you want to cover (typically the date
-of the last downstream Discovery release). The output is a plain JSON file with
-no secrets or credentials — it is safe to share over Slack or email.
+Replace `2025-01-01` with the date you want to query from (typically the date of
+the last downstream Discovery release). The output is a plain JSON file with no
+secrets or credentials — it is safe to share over Slack or email.
 
 ### Step 2 — You receive the file
 
@@ -188,7 +203,7 @@ so the resulting report is just as complete as if you had Gmail access.
 
 | Skill | What it does |
 |-------|-------------|
-| `/run-cve-check-pipeline` | **One-stop shop.** Collects CVE data from all sources, then verifies builds. Supports three modes: downstream only, upstream only, or a side-by-side comparison that highlights regressions and upstream fixes pending a downstream release. |
+| `/run-cve-check-pipeline` | **One-stop shop.** Collects CVE data from all sources, then verifies builds. Supports the same three modes as `/verify-cves-in-builds` below. |
 | `/query-all-cves` | Data collection only. Queries all sources and produces `cve-data/unified-cves.json`. Use this if you don't need build verification. |
 | `/verify-cves-in-builds` | Build verification only. Pulls container images and checks which CVEs from an existing `unified-cves.json` are present or fixed. Three modes: **downstream only** (check the released Discovery images), **upstream only** (check quipucords before cutting a release), or **compare** (delta report across both). Requires `unified-cves.json` from a prior `query-all-cves` run. |
 
@@ -218,7 +233,7 @@ All output is written to `cve-data/` (gitignored):
 | `cve-data/verified-cves-downstream.json` | downstream / compare | Per-container verification for downstream images |
 | `cve-data/verified-cves-upstream.json` | upstream / compare | Per-container verification for upstream images |
 | `cve-data/comparison.json` | compare | Delta between downstream and upstream per CVE |
-| `cve-data/cve-report.html` | all | Visual HTML report — open in a browser (`open` on macOS, `xdg-open` on Linux) |
+| `cve-data/cve-report.html` | all | Visual HTML report |
 
 The HTML report is filterable and sortable, supports light and dark mode, and
 prominently calls out CVEs by priority: upstream regressions first, then unfixed
