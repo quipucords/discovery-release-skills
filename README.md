@@ -39,10 +39,6 @@ The skill connects to `redhat.atlassian.net`. Create an API token at
 [id.atlassian.com](https://id.atlassian.com/manage-profile/security/api-tokens)
 and set it as an environment variable — see [Setup](#setup) below.
 
-> **Note on JIRA token scopes:** Use an API token with sufficient read permissions.
-> Tokens with insufficient scopes silently return 0 results rather than an error,
-> making it look like there are no open CVE issues.
-
 ### Gmail OAuth credentials
 
 OAuth credentials are required to read Gmail. On the first run, a browser window
@@ -104,6 +100,12 @@ session. This file is never committed to any repository.
 }
 ```
 
+> **`JIRA_EMAIL`** — your Atlassian account email address.
+>
+> **`JIRA_API_TOKEN`** — API token for `redhat.atlassian.net`. Tokens with
+> insufficient scopes silently return 0 results rather than an error, so use one
+> with full read permissions.
+>
 > **`ERRATA_HOST`** — required for `query-errata-advisory` (and therefore the full
 > pipeline). Set this to your organization's internal Errata Tool hostname. Red Hat
 > employees: you know what this is; if not, ask a teammate.
