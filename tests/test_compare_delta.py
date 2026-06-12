@@ -45,6 +45,14 @@ def test_unknown_when_no_searched_names():
     assert container_delta(_entry(False, []), _entry(False, [])) == "unknown"
 
 
+def test_unknown_when_one_side_has_no_searched_names():
+    # ds searched nothing (is_fixed=None), us found and fixed the package
+    # is_fixed=None on ds side causes fallthrough → "unknown"
+    ds = {"is_fixed": None, "searched_names": [], "package_found": False}
+    us = {"is_fixed": True,  "searched_names": ["pkg"], "package_found": True}
+    assert container_delta(ds, us) == "unknown"
+
+
 def test_unknown_when_entry_none():
     assert container_delta(None, _entry(True)) == "unknown"
 
