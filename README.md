@@ -86,10 +86,10 @@ upstream-only mode the login check is skipped automatically.
 
 ## Setup
 
-### 1. Set JIRA credentials
+### 1. Set environment variables
 
-Add your JIRA credentials to `~/.claude/settings.json` so they are available in
-every Claude Code session. This file is never committed to any repository.
+Add these to `~/.claude/settings.json` so they are available in every Claude Code
+session. This file is never committed to any repository.
 
 ```json
 {
