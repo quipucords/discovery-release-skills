@@ -63,9 +63,8 @@ def print_comparison_report(data: dict) -> None:
         print("  *** ACTION REQUIRED ***")
         print()
 
-        group = by_delta.get("fixed_upstream_not_downstream", [])
+        group = sorted(by_delta.get("fixed_upstream_not_downstream", []), key=sev_key)
         if group:
-            group.sort(key=sev_key)
             print(f"  Backport candidates — fixed upstream, NOT fixed downstream ({len(group)} CVE(s)):")
             print("  (These fixes exist in the upstream quay.io images but have not yet been")
             print("   shipped in the downstream registry.redhat.io images.)")
@@ -75,33 +74,33 @@ def print_comparison_report(data: dict) -> None:
                 print(f"               {cve.get('cve_link', '')}")
             print()
 
-        group = by_delta.get("not_fixed_in_either", [])
+        group = sorted(by_delta.get("not_fixed_in_either", []), key=sev_key)
         if group:
-            group.sort(key=sev_key)
             print(f"  Not fixed in either downstream or upstream ({len(group)} CVE(s)):")
             print()
             for cve in group:
                 print(f"    [{(cve.get('severity') or '?'):9s}] {cve['cve_id']}")
+                print(f"               {cve.get('cve_link', '')}")
             print()
 
-        group = by_delta.get("fixed_downstream_not_upstream", [])
+        group = sorted(by_delta.get("fixed_downstream_not_upstream", []), key=sev_key)
         if group:
-            group.sort(key=sev_key)
             print(f"  Regression — fixed downstream but NOT in upstream ({len(group)} CVE(s)):")
             print("  (These fixes are present in the downstream release but have been lost in upstream.)")
             print()
             for cve in group:
                 print(f"    [{(cve.get('severity') or '?'):9s}] {cve['cve_id']}")
+                print(f"               {cve.get('cve_link', '')}")
             print()
 
-        group = by_delta.get("unknown", [])
+        group = sorted(by_delta.get("unknown", []), key=sev_key)
         if group:
-            group.sort(key=sev_key)
             print(f"  UNKNOWN — manual verification needed ({len(group)} CVE(s)):")
             print("  (No RPM package data available; may be non-RPM dependencies.)")
             print()
             for cve in group:
                 print(f"    [{(cve.get('severity') or '?'):9s}] {cve['cve_id']}")
+                print(f"               {cve.get('cve_link', '')}")
             print()
 
         print("  *** END ACTION REQUIRED ***")
