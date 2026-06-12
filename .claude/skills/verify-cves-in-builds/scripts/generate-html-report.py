@@ -211,7 +211,6 @@ CSS = """
 
   /* ── Summary cards ───────────────────────────────────────────────────── */
   .cards { display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 2rem; }
-  .card-row-break { flex-basis: 100%; width: 0; height: 0; }
   .card {
     background: var(--surface);
     border: 1px solid var(--border);
@@ -620,21 +619,17 @@ def action_required_html():
 def comparison_summary_cards_html(data: dict) -> str:
     """Summary cards for comparison mode — one card per delta category."""
     summary = data.get("summary", {})
-    # First 3 cards: items that need code work (shown on row 1)
-    row1 = [
+    delta_display = [
         ("fixed_downstream_not_upstream", "Regression",        "stat-not-fixed"),
         ("not_fixed_in_either",           "Not fixed anywhere","stat-not-fixed"),
         ("unknown",                       "Unknown",           "stat-no-pkg-data"),
-    ]
-    # Last 2 cards: good/neutral states (shown on row 2)
-    row2 = [
         ("fixed_in_both",                 "Fixed everywhere",  "stat-fixed"),
         ("fixed_upstream_not_downstream", "Pending release",   "stat-fixed"),
     ]
-
-    def card_html(key, label, css):
+    parts = []
+    for key, label, css in delta_display:
         n = summary.get(key, 0)
-        return f"""
+        parts.append(f"""
     <div class="card">
       <div class="card-title">{label}</div>
       <div class="stat-grid stat-grid-single">
@@ -643,11 +638,7 @@ def comparison_summary_cards_html(data: dict) -> str:
           <span class="stat-l">CVEs</span>
         </div>
       </div>
-    </div>"""
-
-    parts = [card_html(*item) for item in row1]
-    parts.append('<div class="card-row-break"></div>')
-    parts.extend(card_html(*item) for item in row2)
+    </div>""")
     return "\n".join(parts)
 
 
