@@ -14,19 +14,28 @@ Writes:
 All progress messages go to stderr. This script produces no stdout output
 (results are written to cve-data/verified-cves.json). Exits non-zero on failure.
 """
+import argparse
 import json
 import re
 import sys
 import time
 from datetime import datetime, timezone
 
+_parser = argparse.ArgumentParser(
+    description="Check CVEs against installed RPMs for one image set.")
+_parser.add_argument("--set", required=True, choices=["downstream", "upstream"],
+                     dest="set_name",
+                     help="Image set to check: 'downstream' or 'upstream'")
+_args = _parser.parse_args()
+set_name = _args.set_name
+
 # These constants must match the values in pull-and-query-rpms.py.
 SERVER_CONTAINER = "discovery/discovery-server-rhel9"
 UI_CONTAINER     = "discovery/discovery-ui-rhel9"
 
 RPM_FILES = {
-    SERVER_CONTAINER: "cve-data/rpms-server.txt",
-    UI_CONTAINER:     "cve-data/rpms-ui.txt",
+    SERVER_CONTAINER: f"cve-data/rpms-server-{set_name}.txt",
+    UI_CONTAINER:     f"cve-data/rpms-ui-{set_name}.txt",
 }
 
 SEVERITY_ORDER = {"Critical": 4, "Important": 3, "Moderate": 2, "Low": 1, "Unknown": 0}
@@ -209,7 +218,7 @@ def load_rpm_list(path: str) -> tuple[dict[str, list[dict]], list[str]]:
 log("Loading input files...")
 
 unified = load_json("cve-data/unified-cves.json", "unified-cves.json")
-checked_images = load_json("cve-data/checked-images.json", "checked-images.json")
+checked_images = load_json(f"cve-data/checked-images-{set_name}.json", "checked-images.json")
 
 if not unified or not checked_images:
     sys.exit(1)
@@ -364,7 +373,7 @@ output = {
     "cves": enriched_cves,
 }
 
-with open("cve-data/verified-cves.json", "w") as f:
+with open(f"cve-data/verified-cves-{set_name}.json", "w") as f:
     json.dump(output, f, indent=2)
 
-log(f"\nWrote cve-data/verified-cves.json ({len(enriched_cves)} CVEs)")
+log(f"\nWrote cve-data/verified-cves-{set_name}.json ({len(enriched_cves)} CVEs)")
