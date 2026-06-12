@@ -51,8 +51,8 @@ pass `--since-last-release` to auto-detect the last downstream release date;
 pass `--since YYYY-MM-DD` if a custom date is given (default is 90 days ago).
 
 Options to present:
-- **Last 90 days (default)** — query Gmail for Prograde emails from the last 90 days
 - **Since last downstream release** — query catalog for when the latest discovery images were published, use that date; pass `--since-last-release`
+- **Last 90 days (default)** — query Gmail for Prograde emails from the last 90 days
 - **Custom date** — query Gmail from a specific date (ask for the date)
 - **Skip Prograde emails** — omit Gmail entirely; use `--skip-gmail` flag
 
