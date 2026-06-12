@@ -270,6 +270,27 @@ CSS = """
   .action-required a  { color: var(--action-link); }
   .cve-pkg { opacity: 0.65; font-style: italic; }
   .col-pkg { font-size: 0.8rem; color: var(--muted); max-width: 14rem; word-break: break-word; }
+  .tip { position: relative; }
+  .tip::after {
+    content: attr(data-tip);
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--text);
+    color: var(--bg);
+    font-size: 0.72rem;
+    font-family: monospace;
+    white-space: pre;
+    padding: 0.35rem 0.55rem;
+    border-radius: 4px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.12s;
+    z-index: 20;
+    min-width: max-content;
+  }
+  .tip:hover::after { opacity: 1; }
 
   /* ── Pending-release banner (tier 2 — just cut a release) ────────────── */
   .action-release {
@@ -429,17 +450,34 @@ def status_cell(entry: dict | None) -> str:
     is_fixed  = entry.get("is_fixed")
     pkg_found = entry.get("package_found", False)
     searched  = entry.get("searched_names", [])
+    installed = entry.get("installed_nvras", [])
+    fix_nvr   = entry.get("minimum_fixed_nvr") or ""
+
     if is_fixed is True:
-        return status_badge("fixed", "Fixed")
-    if is_fixed is False:
-        return status_badge("not-fixed", "Not Fixed")
-    if pkg_found and is_fixed is None:
-        return status_badge("fix-unknown", "Fix Unknown")
-    if not pkg_found and searched:
-        return status_badge("not-found", "Not Found")
-    if not pkg_found and not searched:
-        return status_badge("no-package-data", "UNKNOWN")
-    return status_badge("na", "N/A")
+        badge = status_badge("fixed", "Fixed")
+    elif is_fixed is False:
+        badge = status_badge("not-fixed", "Not Fixed")
+    elif pkg_found and is_fixed is None:
+        badge = status_badge("fix-unknown", "Fix Unknown")
+    elif not pkg_found and searched:
+        badge = status_badge("not-found", "Not Found")
+    elif not pkg_found and not searched:
+        badge = status_badge("no-package-data", "UNKNOWN")
+    else:
+        return status_badge("na", "N/A")
+
+    tip_lines = []
+    if installed:
+        tip_lines.append("Installed:  " + "\n            ".join(installed))
+    elif searched:
+        tip_lines.append("Not found in image")
+    if fix_nvr:
+        tip_lines.append(f"Fix:        {fix_nvr}")
+    if not tip_lines:
+        return badge
+
+    tip = escape("\n".join(tip_lines))
+    return f'<span class="tip" data-tip="{tip}">{badge}</span>'
 
 
 DELTA_SORT_ORDER = {d: i for i, d in enumerate([
