@@ -2,8 +2,8 @@
 """Print a human-readable summary of CVE verification results.
 
 Single-set mode (default):
-  Reads cve-data/verified-cves-downstream.json. Output is identical to the
-  previous single-image report.
+  Reads cve-data/verified-cves-{set}.json where --set is downstream (default)
+  or upstream.
 
 Comparison mode (--comparison):
   Reads cve-data/comparison.json. Shows a delta summary followed by per-set
@@ -23,6 +23,9 @@ sev_key = lambda c: -SEVERITY_ORDER.get(c.get("severity") or "Unknown", 0)
 parser = argparse.ArgumentParser()
 parser.add_argument("--comparison", action="store_true",
                     help="Read comparison.json and show upstream vs. downstream delta report")
+parser.add_argument("--set", default="downstream", choices=["downstream", "upstream"],
+                    dest="set_name",
+                    help="Which image set to summarise in single-set mode (default: downstream)")
 args = parser.parse_args()
 
 
@@ -245,7 +248,7 @@ def print_single_set_report(data: dict) -> None:
                 print(f"               fixed NVR: unknown")
             print()
 
-    print(f"Full report: cve-data/verified-cves-downstream.json")
+    print(f"Full report: cve-data/verified-cves-{args.set_name}.json")
 
 
 # ── Dispatch ──────────────────────────────────────────────────────────────────
@@ -254,5 +257,5 @@ if args.comparison:
     data = load_json("cve-data/comparison.json")
     print_comparison_report(data)
 else:
-    data = load_json("cve-data/verified-cves-downstream.json")
+    data = load_json(f"cve-data/verified-cves-{args.set_name}.json")
     print_single_set_report(data)

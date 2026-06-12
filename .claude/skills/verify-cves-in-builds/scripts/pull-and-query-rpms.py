@@ -41,35 +41,43 @@ parser = argparse.ArgumentParser(
     description="Pull Discovery container images and query installed RPMs.",
     formatter_class=argparse.RawDescriptionHelpFormatter,
 )
-parser.add_argument("--downstream-server-tag", default="latest",
-                    help="Tag for downstream discovery-server (default: latest)")
-parser.add_argument("--downstream-ui-tag", default="latest",
-                    help="Tag for downstream discovery-ui (default: latest)")
+parser.add_argument("--downstream-server-tag", default=None,
+                    help="Tag for downstream discovery-server (registry.redhat.io)")
+parser.add_argument("--downstream-ui-tag", default=None,
+                    help="Tag for downstream discovery-ui (registry.redhat.io)")
 parser.add_argument("--upstream-server-tag", default=None,
-                    help="Tag for upstream discovery-server (enables dual-set mode)")
+                    help="Tag for upstream discovery-server (quay.io/quipucords)")
 parser.add_argument("--upstream-ui-tag", default=None,
-                    help="Tag for upstream discovery-ui (enables dual-set mode)")
+                    help="Tag for upstream discovery-ui (quay.io/quipucords)")
 args = parser.parse_args()
 
-upstream_tags = [args.upstream_server_tag, args.upstream_ui_tag]
-if any(upstream_tags) and not all(upstream_tags):
-    print("Error: --upstream-server-tag and --upstream-ui-tag must both be provided or both omitted.",
-          file=sys.stderr)
-    sys.exit(1)
+# Each pair must be fully specified or fully omitted.
+for pair, names in [
+    ([args.downstream_server_tag, args.downstream_ui_tag],
+     "--downstream-server-tag and --downstream-ui-tag"),
+    ([args.upstream_server_tag, args.upstream_ui_tag],
+     "--upstream-server-tag and --upstream-ui-tag"),
+]:
+    if any(pair) and not all(pair):
+        print(f"Error: {names} must both be provided or both omitted.", file=sys.stderr)
+        sys.exit(1)
 
-dual_set = all(t is not None for t in upstream_tags)
-
-sets: dict[str, dict[str, str]] = {
-    "downstream": {
+sets: dict[str, dict[str, str]] = {}
+if args.downstream_server_tag:
+    sets["downstream"] = {
         SERVER_CONTAINER: f"{DOWNSTREAM_BASE[SERVER_CONTAINER]}:{args.downstream_server_tag}",
         UI_CONTAINER:     f"{DOWNSTREAM_BASE[UI_CONTAINER]}:{args.downstream_ui_tag}",
     }
-}
-if dual_set:
+if args.upstream_server_tag:
     sets["upstream"] = {
         SERVER_CONTAINER: f"{UPSTREAM_BASE[SERVER_CONTAINER]}:{args.upstream_server_tag}",
         UI_CONTAINER:     f"{UPSTREAM_BASE[UI_CONTAINER]}:{args.upstream_ui_tag}",
     }
+
+if not sets:
+    print("Error: specify at least one set of tags (--downstream-*-tag or --upstream-*-tag).",
+          file=sys.stderr)
+    sys.exit(1)
 
 outfiles: dict[str, dict[str, str]] = {
     sn: {
@@ -117,19 +125,20 @@ def wait_procs(running):
     return results
 
 
-# ── Pre-flight: downstream images always require registry.redhat.io auth ──────
+# ── Pre-flight: check registry.redhat.io auth only when pulling downstream ────
 RH_REGISTRY = "registry.redhat.io"
-result = subprocess.run(
-    ["podman", "login", "--get-login", RH_REGISTRY],
-    capture_output=True, text=True
-)
-if result.returncode != 0:
-    log(f"Error: downstream images require authentication to {RH_REGISTRY}.")
-    log(f"  Log in with: podman login {RH_REGISTRY}")
-    log(f"  Use your Red Hat Customer Portal credentials.")
-    log(f"  See: https://access.redhat.com/RegistryAuthentication")
-    sys.exit(1)
-log(f"Authenticated to {RH_REGISTRY} as {result.stdout.strip()}")
+if "downstream" in sets:
+    result = subprocess.run(
+        ["podman", "login", "--get-login", RH_REGISTRY],
+        capture_output=True, text=True
+    )
+    if result.returncode != 0:
+        log(f"Error: downstream images require authentication to {RH_REGISTRY}.")
+        log(f"  Log in with: podman login {RH_REGISTRY}")
+        log(f"  Use your Red Hat Customer Portal credentials.")
+        log(f"  See: https://access.redhat.com/RegistryAuthentication")
+        sys.exit(1)
+    log(f"Authenticated to {RH_REGISTRY} as {result.stdout.strip()}")
 
 
 # ── Phase 1: Pull all images in parallel ─────────────────────────────────────

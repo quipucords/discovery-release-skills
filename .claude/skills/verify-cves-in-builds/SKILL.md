@@ -50,17 +50,21 @@ installed in a real build.
 ```
 AskUserQuestion({
   "questions": [{
-    "question": "Do you want to check downstream images only, or compare downstream vs. upstream?",
+    "question": "Which images do you want to check?",
     "header": "Mode",
     "multiSelect": false,
     "options": [
       {
         "label": "Downstream only",
-        "description": "Check registry.redhat.io/discovery images. Produces a single-set verification report."
+        "description": "Check registry.redhat.io/discovery images. Use to verify the current downstream release."
+      },
+      {
+        "label": "Upstream only",
+        "description": "Check quay.io/quipucords images. Use to verify the upstream quipucords build before cutting a release."
       },
       {
         "label": "Compare downstream vs. upstream",
-        "description": "Check both registry.redhat.io/discovery (downstream) and quay.io/quipucords (upstream), then produce a delta report showing backport candidates."
+        "description": "Check both registries and produce a delta report: regressions, unfixed CVEs, and which upstream fixes are pending a downstream release."
       }
     ]
   }]
@@ -94,7 +98,34 @@ AskUserQuestion({
 })
 ```
 
-**Question 2b: If Compare — ask four tag questions**
+**Question 2b: If Upstream only — ask two tag questions**
+
+```
+AskUserQuestion({
+  "questions": [
+    {
+      "question": "What tag for the upstream discovery-server image?",
+      "header": "Server tag ↑",
+      "multiSelect": false,
+      "options": [
+        {"label": "latest", "description": "quay.io/quipucords/quipucords:latest"},
+        {"label": "Custom", "description": "Type a specific tag in the Other field"}
+      ]
+    },
+    {
+      "question": "What tag for the upstream discovery-ui image?",
+      "header": "UI tag ↑",
+      "multiSelect": false,
+      "options": [
+        {"label": "latest", "description": "quay.io/quipucords/quipucords-ui:latest"},
+        {"label": "Custom", "description": "Type a specific tag in the Other field"}
+      ]
+    }
+  ]
+})
+```
+
+**Question 2c: If Compare — ask four tag questions**
 
 ```
 AskUserQuestion({
@@ -158,22 +189,28 @@ python3 .claude/skills/check-location.py
 python3 .claude/skills/verify-cves-in-builds/scripts/pull-and-query-rpms.py --downstream-server-tag DS_SERVER_TAG --downstream-ui-tag DS_UI_TAG
 ```
 
+**Upstream only:**
+```bash
+python3 .claude/skills/verify-cves-in-builds/scripts/pull-and-query-rpms.py --upstream-server-tag US_SERVER_TAG --upstream-ui-tag US_UI_TAG
+```
+
 **Compare mode:**
 ```bash
 python3 .claude/skills/verify-cves-in-builds/scripts/pull-and-query-rpms.py --downstream-server-tag DS_SERVER_TAG --downstream-ui-tag DS_UI_TAG --upstream-server-tag US_SERVER_TAG --upstream-ui-tag US_UI_TAG
 ```
 
-Substitute the tag values from Step 1 answers. In dual-set mode all four images are pulled in parallel internally.
-
-Outputs (downstream only): `cve-data/rpms-server-downstream.txt`, `cve-data/rpms-ui-downstream.txt`, `cve-data/checked-images-downstream.json`
-
-Outputs (compare mode, in addition): `cve-data/rpms-server-upstream.txt`, `cve-data/rpms-ui-upstream.txt`, `cve-data/checked-images-upstream.json`
+Substitute the tag values from Step 1 answers. Multiple images are pulled in parallel internally. No `registry.redhat.io` authentication is needed for upstream-only mode (quay.io is public).
 
 ### Step 4 — Verify CVEs against installed RPMs
 
 **Downstream only:**
 ```bash
 python3 .claude/skills/verify-cves-in-builds/scripts/check-cves-in-rpms.py --set downstream
+```
+
+**Upstream only:**
+```bash
+python3 .claude/skills/verify-cves-in-builds/scripts/check-cves-in-rpms.py --set upstream
 ```
 
 **Compare mode (run both sequentially):**
@@ -188,13 +225,18 @@ python3 .claude/skills/verify-cves-in-builds/scripts/check-cves-in-rpms.py --set
 python3 .claude/skills/verify-cves-in-builds/scripts/compare-cve-results.py
 ```
 
-Skip this step in downstream-only mode.
+Skip this step in downstream-only and upstream-only modes.
 
 ### Step 6 — Print summary
 
 **Downstream only:**
 ```bash
 python3 .claude/skills/verify-cves-in-builds/scripts/print-verification-summary.py
+```
+
+**Upstream only:**
+```bash
+python3 .claude/skills/verify-cves-in-builds/scripts/print-verification-summary.py --set upstream
 ```
 
 **Compare mode:**
@@ -212,6 +254,11 @@ these MUST appear in your response exactly as printed, word for word.
 **Downstream only:**
 ```bash
 python3 .claude/skills/verify-cves-in-builds/scripts/generate-html-report.py
+```
+
+**Upstream only:**
+```bash
+python3 .claude/skills/verify-cves-in-builds/scripts/generate-html-report.py --set upstream
 ```
 
 **Compare mode:**

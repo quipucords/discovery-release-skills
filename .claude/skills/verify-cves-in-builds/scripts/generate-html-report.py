@@ -20,6 +20,9 @@ from html import escape
 parser = argparse.ArgumentParser()
 parser.add_argument("--comparison", action="store_true",
                     help="Read comparison.json and render the dual-set comparison report")
+parser.add_argument("--set", default="downstream", choices=["downstream", "upstream"],
+                    dest="set_name",
+                    help="Which image set to report on in single-set mode (default: downstream)")
 args = parser.parse_args()
 
 SEVERITY_ORDER = {"Critical": 4, "Important": 3, "Moderate": 2, "Low": 1, "Unknown": 0}
@@ -43,11 +46,12 @@ if args.comparison:
     cves         = data.get("cves", [])
     generated_at = data.get("generated_at", "unknown")
 else:
+    _sn = args.set_name
     try:
-        with open("cve-data/verified-cves-downstream.json") as f:
+        with open(f"cve-data/verified-cves-{_sn}.json") as f:
             data = json.load(f)
     except FileNotFoundError:
-        print("Error: cve-data/verified-cves-downstream.json not found.", file=sys.stderr)
+        print(f"Error: cve-data/verified-cves-{_sn}.json not found.", file=sys.stderr)
         sys.exit(1)
     except json.JSONDecodeError as e:
         print(f"Error: invalid JSON: {e}", file=sys.stderr)
@@ -861,7 +865,7 @@ else:  # single-set mode
           <th data-col="5" onclick="sortTable(5)">Minimum Fixed</th>
         </tr>"""
     tbody_html       = table_rows_html()
-    data_ref         = "cve-data/verified-cves-downstream.json"
+    data_ref         = f"cve-data/verified-cves-{_sn}.json"
     js_filter        = """
   const container = document.getElementById('f-container').value;
   const status    = document.getElementById('f-status').value;
