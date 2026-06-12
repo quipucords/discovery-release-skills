@@ -1,38 +1,65 @@
 #!/usr/bin/env python3
-"""Generate a self-contained HTML report from cve-data/verified-cves.json.
+"""Generate a self-contained HTML report from cve-data/verified-cves-downstream.json.
 
 All CSS is defined in the <style> block via custom properties — no inline
 styles anywhere in the HTML. Dark mode is handled by
 @media (prefers-color-scheme: dark) overriding the custom properties.
 
-Reads:  cve-data/verified-cves.json
+Reads:  cve-data/verified-cves-downstream.json  (default)
+        cve-data/comparison.json                 (with --comparison)
 Writes: cve-data/cve-report.html
 
 All progress goes to stderr. Exits non-zero on failure.
 """
+import argparse
 import json
 import sys
 from datetime import datetime, timezone
 from html import escape
 
-try:
-    with open("cve-data/verified-cves.json") as f:
-        data = json.load(f)
-except FileNotFoundError:
-    print("Error: cve-data/verified-cves.json not found.", file=sys.stderr)
-    sys.exit(1)
-except json.JSONDecodeError as e:
-    print(f"Error: invalid JSON: {e}", file=sys.stderr)
-    sys.exit(1)
-
-verification  = data.get("verification", {})
-images        = verification.get("images", {})
-skipped_nvras = verification.get("skipped_nvras", {})
-vsummary      = data.get("verification_summary", {})
-cves          = data.get("cves", [])
-verified_at   = data.get("verified_at", "unknown")
+parser = argparse.ArgumentParser()
+parser.add_argument("--comparison", action="store_true",
+                    help="Read comparison.json and render the dual-set comparison report")
+args = parser.parse_args()
 
 SEVERITY_ORDER = {"Critical": 4, "Important": 3, "Moderate": 2, "Low": 1, "Unknown": 0}
+
+# Container name constants (must match check-cves-in-rpms.py)
+SERVER_CONTAINER = "discovery/discovery-server-rhel9"
+UI_CONTAINER     = "discovery/discovery-ui-rhel9"
+
+if args.comparison:
+    try:
+        with open("cve-data/comparison.json") as f:
+            data = json.load(f)
+    except FileNotFoundError:
+        print("Error: cve-data/comparison.json not found. Run compare-cve-results.py first.",
+              file=sys.stderr)
+        sys.exit(1)
+    except json.JSONDecodeError as e:
+        print(f"Error: invalid JSON: {e}", file=sys.stderr)
+        sys.exit(1)
+    mode         = "comparison"
+    cves         = data.get("cves", [])
+    generated_at = data.get("generated_at", "unknown")
+else:
+    try:
+        with open("cve-data/verified-cves-downstream.json") as f:
+            data = json.load(f)
+    except FileNotFoundError:
+        print("Error: cve-data/verified-cves-downstream.json not found.", file=sys.stderr)
+        sys.exit(1)
+    except json.JSONDecodeError as e:
+        print(f"Error: invalid JSON: {e}", file=sys.stderr)
+        sys.exit(1)
+    mode          = "single"
+    verification  = data.get("verification", {})
+    images        = verification.get("images", {})
+    skipped_nvras = verification.get("skipped_nvras", {})
+    vsummary      = data.get("verification_summary", {})
+    cves          = data.get("cves", [])
+    verified_at   = data.get("verified_at", "unknown")
+    generated_at  = verified_at
 
 
 # ── CSS (pure string — no f-string, so CSS braces need no escaping) ──────────
@@ -80,6 +107,13 @@ CSS = """
     --status-no-package-data: #b45309;
     --status-fix-unknown:     #ca8a04;
     --status-na:              #9ca3af;
+
+    /* Delta badges */
+    --delta-backport:      #7c3aed;
+    --delta-not-fixed:     #dc2626;
+    --delta-regression:    #9a3412;
+    --delta-unknown:       #b45309;
+    --delta-fixed-both:    #16a34a;
   }
 
   /* ── Dark mode overrides ─────────────────────────────────────────────── */
@@ -125,6 +159,12 @@ CSS = """
       --status-no-package-data: #f59e0b;
       --status-fix-unknown:     #eab308;
       --status-na:              #6b7280;
+
+      --delta-backport:      #a78bfa;
+      --delta-not-fixed:     #ef4444;
+      --delta-regression:    #fb923c;
+      --delta-unknown:       #f59e0b;
+      --delta-fixed-both:    #22c55e;
     }
   }
 
@@ -280,6 +320,12 @@ CSS = """
   .status-no-package-data { background: var(--status-no-package-data); }
   .status-fix-unknown     { background: var(--status-fix-unknown); }
   .status-na              { background: var(--status-na); }
+  /* Delta badges */
+  .delta-backport     { background: var(--delta-backport); }
+  .delta-not-fixed    { background: var(--delta-not-fixed); }
+  .delta-regression   { background: var(--delta-regression); }
+  .delta-unknown      { background: var(--delta-unknown); }
+  .delta-fixed-both   { background: var(--delta-fixed-both); }
 
   /* ── Inline code ─────────────────────────────────────────────────────── */
   code {
@@ -311,6 +357,78 @@ def sev_badge(severity, title=""):
 def status_badge(status_key, label):
     css = f"status-{status_key.replace('_', '-')}"
     return f'<span class="badge {css}">{escape(label)}</span>'
+
+
+DELTA_META = {
+    "fixed_upstream_not_downstream": ("delta-backport",  "Backport needed"),
+    "not_fixed_in_either":           ("delta-not-fixed", "Not fixed anywhere"),
+    "fixed_downstream_not_upstream": ("delta-regression","Regression"),
+    "unknown":                       ("delta-unknown",   "Unknown"),
+    "fixed_in_both":                 ("delta-fixed-both","Fixed everywhere"),
+}
+
+
+def delta_badge(delta_key: str) -> str:
+    css, label = DELTA_META.get(delta_key, ("delta-unknown", escape(delta_key)))
+    return f'<span class="badge {css}">{label}</span>'
+
+
+def status_cell(entry: dict | None) -> str:
+    """Render a status badge for one container entry in the comparison table."""
+    if entry is None:
+        return status_badge("na", "N/A")
+    is_fixed  = entry.get("is_fixed")
+    pkg_found = entry.get("package_found", False)
+    searched  = entry.get("searched_names", [])
+    if is_fixed is True:
+        return status_badge("fixed", "Fixed")
+    if is_fixed is False:
+        return status_badge("not-fixed", "Not Fixed")
+    if pkg_found and is_fixed is None:
+        return status_badge("fix-unknown", "Fix Unknown")
+    if not pkg_found and searched:
+        return status_badge("not-found", "Not Found")
+    if not pkg_found and not searched:
+        return status_badge("no-package-data", "UNKNOWN")
+    return status_badge("na", "N/A")
+
+
+DELTA_SORT_ORDER = {d: i for i, d in enumerate([
+    "fixed_upstream_not_downstream",
+    "not_fixed_in_either",
+    "fixed_downstream_not_upstream",
+    "unknown",
+    "fixed_in_both",
+])}
+
+
+def make_comparison_rows(cves: list) -> str:
+    """Build one HTML table row per CVE for the unified comparison table."""
+    sorted_cves = sorted(cves, key=lambda c: (
+        DELTA_SORT_ORDER.get(c.get("delta", "unknown"), 99),
+        -SEVERITY_ORDER.get(c.get("severity") or "Unknown", 0),
+        c.get("cve_id", ""),
+    ))
+    parts = []
+    for cve in sorted_cves:
+        cve_id   = cve.get("cve_id", "")
+        cve_link = cve.get("cve_link", f"https://access.redhat.com/security/cve/{cve_id}")
+        severity = cve.get("severity") or "Unknown"
+        delta    = cve.get("delta", "unknown")
+        ds       = cve.get("downstream", {})
+        us       = cve.get("upstream", {})
+        parts.append(
+            f'<tr data-delta="{delta}" data-severity="{severity}">'
+            f'<td><a href="{escape(cve_link)}" target="_blank">{escape(cve_id)}</a></td>'
+            f'<td>{sev_badge(severity)}</td>'
+            f'<td>{status_cell(ds.get(SERVER_CONTAINER))}</td>'
+            f'<td>{status_cell(ds.get(UI_CONTAINER))}</td>'
+            f'<td>{status_cell(us.get(SERVER_CONTAINER))}</td>'
+            f'<td>{status_cell(us.get(UI_CONTAINER))}</td>'
+            f'<td>{delta_badge(delta)}</td>'
+            f'</tr>'
+        )
+    return "\n".join(parts)
 
 
 # ── Build per-CVE rows ────────────────────────────────────────────────────────
@@ -363,13 +481,6 @@ def make_rows(cves, images):
                 "checked_image":    entry.get("checked_image", ""),
             })
     return rows
-
-
-rows = make_rows(cves, images)
-
-any_skipped      = {c: lines for c, lines in skipped_nvras.items() if lines}
-not_found_rows   = [r for r in rows if r["status_key"] == "not-found"]
-no_pkg_data_rows = [r for r in rows if r["status_key"] == "no-package-data"]
 
 
 # ── Section builders ──────────────────────────────────────────────────────────
@@ -461,6 +572,116 @@ def action_required_html():
     return "\n".join(parts)
 
 
+def comparison_summary_cards_html(data: dict) -> str:
+    """Summary cards for comparison mode — one card per delta category."""
+    summary = data.get("summary", {})
+    delta_display = [
+        ("fixed_upstream_not_downstream", "Backport needed",  "stat-not-fixed"),
+        ("not_fixed_in_either",           "Not fixed anywhere","stat-not-fixed"),
+        ("fixed_downstream_not_upstream", "Regression",       "stat-no-pkg-data"),
+        ("unknown",                       "Unknown",          "stat-no-pkg-data"),
+        ("fixed_in_both",                 "Fixed everywhere", "stat-fixed"),
+    ]
+    parts = []
+    for key, label, css in delta_display:
+        n = summary.get(key, 0)
+        parts.append(f"""
+    <div class="card">
+      <div class="card-title">{label}</div>
+      <div class="stat-grid" style="grid-template-columns: 1fr;">
+        <div class="stat {css}">
+          <span class="stat-n">{n}</span>
+          <span class="stat-l">CVEs</span>
+        </div>
+      </div>
+    </div>""")
+    return "\n".join(parts)
+
+
+def comparison_action_required_html(cves: list) -> str:
+    """ACTION REQUIRED banner for comparison mode."""
+    by_delta: dict[str, list] = {}
+    for cve in cves:
+        by_delta.setdefault(cve.get("delta", "unknown"), []).append(cve)
+
+    action_deltas = [
+        "fixed_upstream_not_downstream",
+        "not_fixed_in_either",
+        "fixed_downstream_not_upstream",
+        "unknown",
+    ]
+    if not any(by_delta.get(d) for d in action_deltas):
+        return ""
+
+    parts = ['<div class="action-required"><h2>⚠ ACTION REQUIRED</h2>']
+
+    group = sorted(by_delta.get("fixed_upstream_not_downstream", []),
+                   key=lambda c: -SEVERITY_ORDER.get(c.get("severity") or "Unknown", 0))
+    if group:
+        parts.append("<h3>Backport candidates — fixed upstream, NOT fixed downstream</h3>")
+        parts.append("<p>These fixes exist in the upstream quay.io images but have not yet "
+                     "been shipped in the downstream registry.redhat.io images.</p><ul>")
+        for cve in group:
+            cve_id   = cve.get("cve_id", "")
+            cve_link = cve.get("cve_link", f"https://access.redhat.com/security/cve/{cve_id}")
+            sev      = cve.get("severity") or "Unknown"
+            parts.append(
+                f'<li>{sev_badge(sev)} '
+                f'<a href="{escape(cve_link)}" target="_blank">{escape(cve_id)}</a></li>'
+            )
+        parts.append("</ul>")
+
+    group = sorted(by_delta.get("not_fixed_in_either", []),
+                   key=lambda c: -SEVERITY_ORDER.get(c.get("severity") or "Unknown", 0))
+    if group:
+        parts.append("<h3>Not fixed in either downstream or upstream</h3><ul>")
+        for cve in group:
+            cve_id   = cve.get("cve_id", "")
+            cve_link = cve.get("cve_link", f"https://access.redhat.com/security/cve/{cve_id}")
+            sev      = cve.get("severity") or "Unknown"
+            parts.append(
+                f'<li>{sev_badge(sev)} '
+                f'<a href="{escape(cve_link)}" target="_blank">{escape(cve_id)}</a></li>'
+            )
+        parts.append("</ul>")
+
+    group = sorted(by_delta.get("fixed_downstream_not_upstream", []),
+                   key=lambda c: -SEVERITY_ORDER.get(c.get("severity") or "Unknown", 0))
+    if group:
+        parts.append("<h3>⚠ Regression — fixed downstream but NOT in upstream</h3>")
+        parts.append("<p>These fixes are present in the downstream release but have been "
+                     "lost in the upstream build. Investigate upstream.</p><ul>")
+        for cve in group:
+            cve_id   = cve.get("cve_id", "")
+            cve_link = cve.get("cve_link", f"https://access.redhat.com/security/cve/{cve_id}")
+            sev      = cve.get("severity") or "Unknown"
+            parts.append(
+                f'<li>{sev_badge(sev)} '
+                f'<a href="{escape(cve_link)}" target="_blank">{escape(cve_id)}</a></li>'
+            )
+        parts.append("</ul>")
+
+    group = sorted(by_delta.get("unknown", []),
+                   key=lambda c: -SEVERITY_ORDER.get(c.get("severity") or "Unknown", 0))
+    if group:
+        parts.append("<h3>UNKNOWN — manual verification needed</h3>")
+        parts.append("<p>No RPM package data is available for these CVEs. "
+                     "The vulnerable component may be a non-RPM dependency "
+                     "(e.g. npm, Python). <strong>Investigate each one manually.</strong></p><ul>")
+        for cve in group:
+            cve_id   = cve.get("cve_id", "")
+            cve_link = cve.get("cve_link", f"https://access.redhat.com/security/cve/{cve_id}")
+            sev      = cve.get("severity") or "Unknown"
+            parts.append(
+                f'<li>{sev_badge(sev)} '
+                f'<a href="{escape(cve_link)}" target="_blank">{escape(cve_id)}</a></li>'
+            )
+        parts.append("</ul>")
+
+    parts.append("</div>")
+    return "\n".join(parts)
+
+
 def table_rows_html():
     parts = []
     for r in rows:
@@ -479,36 +700,88 @@ def table_rows_html():
     return "\n".join(parts)
 
 
-# ── Assemble HTML ─────────────────────────────────────────────────────────────
+# ── Assemble HTML (mode-specific) ────────────────────────────────────────────
 
-container_options = "\n".join(
-    f'<option value="{c.split("/")[-1]}">{c.split("/")[-1]}</option>'
-    for c in images
-)
+if mode == "comparison":
+    title         = "CVE Comparison Report"
+    subtitle      = (f"Generated {escape(datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC'))}"
+                     f"&nbsp;·&nbsp; Data at: {escape(generated_at[:19].replace('T', ' '))} UTC")
+    cards_html    = comparison_summary_cards_html(data)
+    action_html   = comparison_action_required_html(cves)
+    filters_html  = """
+    <label for="f-delta">Delta</label>
+    <select id="f-delta" onchange="applyFilters()">
+      <option value="">All</option>
+      <option value="fixed_upstream_not_downstream">Backport needed</option>
+      <option value="not_fixed_in_either">Not fixed anywhere</option>
+      <option value="fixed_downstream_not_upstream">Regression</option>
+      <option value="unknown">Unknown</option>
+      <option value="fixed_in_both">Fixed everywhere</option>
+    </select>
+    <label for="f-severity">Severity</label>
+    <select id="f-severity" onchange="applyFilters()">
+      <option value="">All</option>
+      <option value="Critical">Critical</option>
+      <option value="Important">Important</option>
+      <option value="Moderate">Moderate</option>
+      <option value="Low">Low</option>
+      <option value="Unknown">Unknown</option>
+    </select>
+    <input id="f-search" type="search" placeholder="Search CVE ID…" oninput="applyFilters()">
+    <span class="row-count" id="row-count"></span>"""
+    thead_html    = """
+        <tr>
+          <th onclick="sortTable(0)">CVE ID</th>
+          <th onclick="sortTable(1)">Severity</th>
+          <th onclick="sortTable(2)">Server ↓</th>
+          <th onclick="sortTable(3)">UI ↓</th>
+          <th onclick="sortTable(4)">Server ↑</th>
+          <th onclick="sortTable(5)">UI ↑</th>
+          <th onclick="sortTable(6)">Delta</th>
+        </tr>"""
+    tbody_html    = make_comparison_rows(cves)
+    data_ref      = "cve-data/comparison.json"
+    js_filter     = """
+  const delta    = document.getElementById('f-delta').value;
+  const severity = document.getElementById('f-severity').value;
+  const search   = document.getElementById('f-search').value.toLowerCase();
+  let visible = 0;
+  for (const tr of tbody.rows) {
+    const show =
+      (!delta    || tr.dataset.delta    === delta)    &&
+      (!severity || tr.dataset.severity === severity) &&
+      (!search   || tr.cells[0].textContent.toLowerCase().includes(search));
+    tr.classList.toggle('hidden', !show);
+    if (show) visible++;
+  }
+  countEl.textContent = visible + ' row' + (visible !== 1 ? 's' : '');"""
+    js_default_sort = """
+  const deltaOrder = {fixed_upstream_not_downstream:0, not_fixed_in_either:1,
+                      fixed_downstream_not_upstream:2, unknown:3, fixed_in_both:4};
+  const sevOrder   = {Critical:4, Important:3, Moderate:2, Low:1, Unknown:0};
+  const rows = Array.from(tbody.rows);
+  rows.sort((a, b) => {
+    const dd = (deltaOrder[a.dataset.delta] ?? 99) - (deltaOrder[b.dataset.delta] ?? 99);
+    if (dd !== 0) return dd;
+    return (sevOrder[b.dataset.severity] || 0) - (sevOrder[a.dataset.severity] || 0);
+  });
+  rows.forEach(r => tbody.appendChild(r));"""
 
-html = f"""<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CVE Build Verification Report</title>
-<style>{CSS}</style>
-</head>
-<body>
-
-<div class="header">
-  <h1>CVE Build Verification Report</h1>
-  <div class="sub">Generated {escape(datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"))}
-  &nbsp;·&nbsp; Data verified at: {escape(verified_at[:19].replace("T", " "))} UTC</div>
-</div>
-
-<div class="main">
-
-  <div class="cards">{summary_cards_html()}</div>
-
-  {action_required_html()}
-
-  <div class="filters">
+else:  # single-set mode
+    rows = make_rows(cves, images)
+    any_skipped      = {c: lines for c, lines in skipped_nvras.items() if lines}
+    not_found_rows   = [r for r in rows if r["status_key"] == "not-found"]
+    no_pkg_data_rows = [r for r in rows if r["status_key"] == "no-package-data"]
+    title            = "CVE Build Verification Report"
+    subtitle         = (f"Generated {escape(datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC'))}"
+                        f"&nbsp;·&nbsp; Data verified at: {escape(verified_at[:19].replace('T', ' '))} UTC")
+    cards_html       = summary_cards_html()
+    action_html      = action_required_html()
+    container_options = "\n".join(
+        f'<option value="{c.split("/")[-1]}">{c.split("/")[-1]}</option>'
+        for c in images
+    )
+    filters_html     = f"""
     <label for="f-container">Container</label>
     <select id="f-container" onchange="applyFilters()">
       <option value="">All</option>
@@ -534,12 +807,8 @@ html = f"""<!DOCTYPE html>
     </select>
     <input id="f-search" type="search" placeholder="Search CVE ID…"
            oninput="applyFilters()">
-    <span class="row-count" id="row-count"></span>
-  </div>
-
-  <div class="table-wrap">
-    <table id="cve-table">
-      <thead>
+    <span class="row-count" id="row-count"></span>"""
+    thead_html       = """
         <tr>
           <th onclick="sortTable(0)">CVE ID</th>
           <th onclick="sortTable(1)">Severity</th>
@@ -547,16 +816,73 @@ html = f"""<!DOCTYPE html>
           <th onclick="sortTable(3)">Status</th>
           <th onclick="sortTable(4)">Installed</th>
           <th onclick="sortTable(5)">Minimum Fixed</th>
-        </tr>
-      </thead>
+        </tr>"""
+    tbody_html       = table_rows_html()
+    data_ref         = "cve-data/verified-cves-downstream.json"
+    js_filter        = """
+  const container = document.getElementById('f-container').value;
+  const status    = document.getElementById('f-status').value;
+  const severity  = document.getElementById('f-severity').value;
+  const search    = document.getElementById('f-search').value.toLowerCase();
+  let visible = 0;
+  for (const tr of tbody.rows) {
+    const show =
+      (!container || tr.dataset.container === container) &&
+      (!status    || tr.dataset.status    === status)    &&
+      (!severity  || tr.dataset.severity  === severity)  &&
+      (!search    || tr.cells[0].textContent.toLowerCase().includes(search));
+    tr.classList.toggle('hidden', !show);
+    if (show) visible++;
+  }
+  countEl.textContent = visible + ' row' + (visible !== 1 ? 's' : '');"""
+    js_default_sort  = """
+  const sevOrder    = {Critical:4, Important:3, Moderate:2, Low:1, Unknown:0};
+  const statusOrder = {'not-fixed':3, 'not-found':2, 'no-package-data':2, 'fix-unknown':1, fixed:0, na:-1};
+  const rows = Array.from(tbody.rows);
+  rows.sort((a, b) => {
+    const sd = (sevOrder[b.dataset.severity] || 0) - (sevOrder[a.dataset.severity] || 0);
+    if (sd !== 0) return sd;
+    return (statusOrder[b.dataset.status] || 0) - (statusOrder[a.dataset.status] || 0);
+  });
+  rows.forEach(r => tbody.appendChild(r));"""
+
+
+html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{title}</title>
+<style>{CSS}</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>{title}</h1>
+  <div class="sub">{subtitle}</div>
+</div>
+
+<div class="main">
+
+  <div class="cards">{cards_html}</div>
+
+  {action_html}
+
+  <div class="filters">
+    {filters_html}
+  </div>
+
+  <div class="table-wrap">
+    <table id="cve-table">
+      <thead>{thead_html}</thead>
       <tbody id="cve-tbody">
-{table_rows_html()}
+{tbody_html}
       </tbody>
     </table>
   </div>
 
   <div class="footer">
-    Full machine-readable data: <code>cve-data/verified-cves.json</code>
+    Full machine-readable data: <code>{data_ref}</code>
   </div>
 
 </div>
@@ -567,21 +893,7 @@ const countEl = document.getElementById('row-count');
 let sortCol = -1, sortAsc = true;
 
 function applyFilters() {{
-  const container = document.getElementById('f-container').value;
-  const status    = document.getElementById('f-status').value;
-  const severity  = document.getElementById('f-severity').value;
-  const search    = document.getElementById('f-search').value.toLowerCase();
-  let visible = 0;
-  for (const tr of tbody.rows) {{
-    const show =
-      (!container || tr.dataset.container === container) &&
-      (!status    || tr.dataset.status    === status)    &&
-      (!severity  || tr.dataset.severity  === severity)  &&
-      (!search    || tr.cells[0].textContent.toLowerCase().includes(search));
-    tr.classList.toggle('hidden', !show);
-    if (show) visible++;
-  }}
-  countEl.textContent = visible + ' row' + (visible !== 1 ? 's' : '');
+  {js_filter}
 }}
 
 function sortTable(col) {{
@@ -601,17 +913,8 @@ function sortTable(col) {{
   rows.forEach(r => tbody.appendChild(r));
 }}
 
-/* Default sort: severity desc, then unfixed-first */
 (function () {{
-  const sevOrder    = {{Critical:4, Important:3, Moderate:2, Low:1, Unknown:0}};
-  const statusOrder = {{'not-fixed':3, 'not-found':2, 'no-package-data':2, 'fix-unknown':1, fixed:0, na:-1}};
-  const rows = Array.from(tbody.rows);
-  rows.sort((a, b) => {{
-    const sd = (sevOrder[b.dataset.severity] || 0) - (sevOrder[a.dataset.severity] || 0);
-    if (sd !== 0) return sd;
-    return (statusOrder[b.dataset.status] || 0) - (statusOrder[a.dataset.status] || 0);
-  }});
-  rows.forEach(r => tbody.appendChild(r));
+  {js_default_sort}
 }})();
 
 applyFilters();
@@ -625,4 +928,4 @@ with open(out_path, "w") as f:
     f.write(html)
 
 print(f"Report written to {out_path}", file=sys.stderr)
-print(f"Open with: open {out_path}", file=sys.stderr)
+print(f"Open with: open {out_path}  (macOS)  or  xdg-open {out_path}  (Linux)", file=sys.stderr)
