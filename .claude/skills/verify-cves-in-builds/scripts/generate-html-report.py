@@ -626,8 +626,8 @@ def comparison_summary_cards_html(data: dict) -> str:
         ("fixed_downstream_not_upstream", "Regression",        "stat-not-fixed"),
         ("not_fixed_in_either",           "Not fixed anywhere","stat-not-fixed"),
         ("unknown",                       "Unknown",           "stat-no-pkg-data"),
-        ("fixed_in_both",                 "Fixed everywhere",  "stat-fixed"),
         ("fixed_upstream_not_downstream", "Pending release",   "stat-fixed"),
+        ("fixed_in_both",                 "Fixed everywhere",  "stat-fixed"),
     ]
     parts = []
     for key, label, css in delta_display:
