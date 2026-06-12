@@ -118,6 +118,13 @@ CSS = """
     /* Comparison table column group headers */
     --col-ds: #1d4ed8;
     --col-us: #15803d;
+
+    /* Pending-release (tier 2) banner */
+    --release-bg:      #f0fdf4;
+    --release-border:  #86efac;
+    --release-text:    #14532d;
+    --release-heading: #15803d;
+    --release-link:    #15803d;
   }
 
   /* ── Dark mode overrides ─────────────────────────────────────────────── */
@@ -172,6 +179,12 @@ CSS = """
 
       --col-ds: #60a5fa;
       --col-us: #4ade80;
+
+      --release-bg:      #052e16;
+      --release-border:  #15803d;
+      --release-text:    #86efac;
+      --release-heading: #4ade80;
+      --release-link:    #4ade80;
     }
   }
 
@@ -234,13 +247,13 @@ CSS = """
   .stat-not-found   .stat-n { color: var(--status-not-found); }
   .stat-no-pkg-data .stat-n { color: var(--status-no-package-data); }
 
-  /* ── Action-required banner ──────────────────────────────────────────── */
+  /* ── Action-required banner (tier 1 — code changes needed) ──────────── */
   .action-required {
     background: var(--action-bg);
     border: 2px solid var(--action-border);
     border-radius: 0.75rem;
     padding: 1.25rem;
-    margin-bottom: 2rem;
+    margin-bottom: 1rem;
   }
   .action-required h2 { color: var(--action-heading); font-size: 1rem; margin-bottom: 0.75rem; }
   .action-required h3 { color: var(--action-heading); font-size: 0.875rem; margin: 0.75rem 0 0.4rem; }
@@ -248,6 +261,21 @@ CSS = """
   .action-required ul { list-style: disc; padding-left: 1.25rem; font-size: 0.875rem; color: var(--action-text); }
   .action-required li { margin: 0.3rem 0; }
   .action-required a  { color: var(--action-link); }
+
+  /* ── Pending-release banner (tier 2 — just cut a release) ────────────── */
+  .action-release {
+    background: var(--release-bg);
+    border: 2px solid var(--release-border);
+    border-radius: 0.75rem;
+    padding: 1.25rem;
+    margin-bottom: 2rem;
+  }
+  .action-release h2 { color: var(--release-heading); font-size: 1rem; margin-bottom: 0.75rem; }
+  .action-release h3 { color: var(--release-heading); font-size: 0.875rem; margin: 0.75rem 0 0.4rem; }
+  .action-release p  { font-size: 0.875rem; color: var(--release-text); margin-bottom: 0.5rem; }
+  .action-release ul { list-style: disc; padding-left: 1.25rem; font-size: 0.875rem; color: var(--release-text); }
+  .action-release li { margin: 0.3rem 0; }
+  .action-release a  { color: var(--release-link); }
 
   /* ── Filters bar ─────────────────────────────────────────────────────── */
   .filters {
@@ -611,29 +639,17 @@ def comparison_summary_cards_html(data: dict) -> str:
 
 
 def comparison_action_required_html(cves: list) -> str:
-    """ACTION REQUIRED banner for comparison mode."""
+    """Two-tier action banners for comparison mode.
+
+    Tier 1 (red): issues requiring upstream code changes — regression, not fixed anywhere, unknown.
+    Tier 2 (green): fixes that exist upstream but need a downstream release — no code changes needed.
+    """
     by_delta: dict[str, list] = {}
     for cve in cves:
         by_delta.setdefault(cve.get("delta", "unknown"), []).append(cve)
 
-    action_deltas = [
-        "fixed_downstream_not_upstream",
-        "not_fixed_in_either",
-        "fixed_upstream_not_downstream",
-        "unknown",
-    ]
-    if not any(by_delta.get(d) for d in action_deltas):
-        return ""
-
-    parts = ['<div class="action-required"><h2>⚠ ACTION REQUIRED</h2>']
-
-    group = sorted(by_delta.get("fixed_downstream_not_upstream", []),
-                   key=lambda c: -SEVERITY_ORDER.get(c.get("severity") or "Unknown", 0))
-    if group:
-        parts.append("<h3>🚨 Upstream regression — fixed downstream but NOT in upstream</h3>")
-        parts.append("<p>The downstream Discovery release contains these fixes, but they have been "
-                     "lost from the upstream quipucords codebase. This is unexpected and needs "
-                     "immediate investigation. Find and restore the fix upstream.</p><ul>")
+    def cve_list_html(group: list) -> str:
+        parts = ["<ul>"]
         for cve in group:
             cve_id   = cve.get("cve_id", "")
             cve_link = cve.get("cve_link", f"https://access.redhat.com/security/cve/{cve_id}")
@@ -643,60 +659,66 @@ def comparison_action_required_html(cves: list) -> str:
                 f'<a href="{escape(cve_link)}" target="_blank">{escape(cve_id)}</a></li>'
             )
         parts.append("</ul>")
+        return "\n".join(parts)
 
-    group = sorted(by_delta.get("not_fixed_in_either", []),
-                   key=lambda c: -SEVERITY_ORDER.get(c.get("severity") or "Unknown", 0))
+    sev_sort = lambda c: -SEVERITY_ORDER.get(c.get("severity") or "Unknown", 0)
+    result = ""
+
+    # ── Tier 1: code changes required ────────────────────────────────────────
+    tier1_parts = []
+
+    group = sorted(by_delta.get("fixed_downstream_not_upstream", []), key=sev_sort)
     if group:
-        parts.append("<h3>Not fixed anywhere — fix needs to be developed</h3>")
-        parts.append("<p>Neither the upstream quipucords build nor the downstream Discovery release "
-                     "contains a fix for these CVEs. Develop and merge the fix upstream first; "
-                     "a downstream release will then pick it up.</p><ul>")
-        for cve in group:
-            cve_id   = cve.get("cve_id", "")
-            cve_link = cve.get("cve_link", f"https://access.redhat.com/security/cve/{cve_id}")
-            sev      = cve.get("severity") or "Unknown"
-            parts.append(
-                f'<li>{sev_badge(sev)} '
-                f'<a href="{escape(cve_link)}" target="_blank">{escape(cve_id)}</a></li>'
-            )
-        parts.append("</ul>")
+        tier1_parts.append("<h3>🚨 Upstream regression — fixed downstream but NOT in upstream</h3>")
+        tier1_parts.append(
+            "<p>The downstream Discovery release contains these fixes, but they have been lost "
+            "from the upstream quipucords codebase. This is unexpected. Find and restore the "
+            "fix in the upstream quipucords project immediately.</p>"
+        )
+        tier1_parts.append(cve_list_html(group))
 
-    group = sorted(by_delta.get("fixed_upstream_not_downstream", []),
-                   key=lambda c: -SEVERITY_ORDER.get(c.get("severity") or "Unknown", 0))
+    group = sorted(by_delta.get("not_fixed_in_either", []), key=sev_sort)
     if group:
-        parts.append("<h3>Pending downstream release — fixed upstream, not yet in downstream</h3>")
-        parts.append("<p>The fix has been merged to the upstream quipucords codebase but has not yet "
-                     "been shipped in a downstream Discovery release. Cut a new release to deliver "
-                     "these fixes. This is the normal release workflow.</p><ul>")
-        for cve in group:
-            cve_id   = cve.get("cve_id", "")
-            cve_link = cve.get("cve_link", f"https://access.redhat.com/security/cve/{cve_id}")
-            sev      = cve.get("severity") or "Unknown"
-            parts.append(
-                f'<li>{sev_badge(sev)} '
-                f'<a href="{escape(cve_link)}" target="_blank">{escape(cve_id)}</a></li>'
-            )
-        parts.append("</ul>")
+        tier1_parts.append("<h3>Not fixed anywhere — develop the fix upstream</h3>")
+        tier1_parts.append(
+            "<p>No fix exists yet in either the upstream quipucords build or the downstream "
+            "Discovery release. Develop and merge the fix into the upstream quipucords project "
+            "first; a downstream release will then pick it up.</p>"
+        )
+        tier1_parts.append(cve_list_html(group))
 
-    group = sorted(by_delta.get("unknown", []),
-                   key=lambda c: -SEVERITY_ORDER.get(c.get("severity") or "Unknown", 0))
+    group = sorted(by_delta.get("unknown", []), key=sev_sort)
     if group:
-        parts.append("<h3>UNKNOWN — manual verification needed</h3>")
-        parts.append("<p>No RPM package data is available for these CVEs. "
-                     "The vulnerable component may be a non-RPM dependency "
-                     "(e.g. npm, Python). <strong>Investigate each one manually.</strong></p><ul>")
-        for cve in group:
-            cve_id   = cve.get("cve_id", "")
-            cve_link = cve.get("cve_link", f"https://access.redhat.com/security/cve/{cve_id}")
-            sev      = cve.get("severity") or "Unknown"
-            parts.append(
-                f'<li>{sev_badge(sev)} '
-                f'<a href="{escape(cve_link)}" target="_blank">{escape(cve_id)}</a></li>'
-            )
-        parts.append("</ul>")
+        tier1_parts.append("<h3>UNKNOWN — manual verification needed</h3>")
+        tier1_parts.append(
+            "<p>No RPM package data is available. The vulnerable component may be a non-RPM "
+            "dependency (e.g. npm, Python). <strong>Investigate each CVE manually.</strong></p>"
+        )
+        tier1_parts.append(cve_list_html(group))
 
-    parts.append("</div>")
-    return "\n".join(parts)
+    if tier1_parts:
+        result += (
+            '<div class="action-required">'
+            '<h2>⚠ Action Required — Upstream code changes needed</h2>'
+            + "\n".join(tier1_parts)
+            + "</div>\n"
+        )
+
+    # ── Tier 2: release action only ──────────────────────────────────────────
+    group = sorted(by_delta.get("fixed_upstream_not_downstream", []), key=sev_sort)
+    if group:
+        result += (
+            '<div class="action-release">'
+            "<h2>📦 Release Needed — No code changes required</h2>"
+            "<h3>Fixed upstream, pending downstream release</h3>"
+            "<p>These fixes have been merged to the upstream quipucords codebase. "
+            "No further code changes are needed. Cut a new downstream Discovery release "
+            "to ship them. This is the normal release workflow.</p>"
+            + cve_list_html(group)
+            + "</div>\n"
+        )
+
+    return result
 
 
 def table_rows_html():
