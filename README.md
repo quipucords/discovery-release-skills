@@ -25,7 +25,8 @@ see [Quick Start](#quick-start) to run your first report.
 
 ### Required for `/query-all-cves` and `/run-cve-check-pipeline`
 
-**Red Hat Errata API (Kerberos)**
+#### Red Hat Errata API (Kerberos)
+
 The errata advisory lookup requires a valid Kerberos ticket. You must be on the
 Red Hat internal network or connected via VPN:
 ```bash
@@ -33,7 +34,8 @@ kinit <username>@YOUR_KERBEROS_REALM
 klist -s && echo "ticket valid" || echo "need to kinit"
 ```
 
-**JIRA API token** *(if querying JIRA)*
+#### JIRA API token *(if querying JIRA)*
+
 The skill connects to `redhat.atlassian.net`. Create an API token at
 [id.atlassian.com](https://id.atlassian.com/manage-profile/security/api-tokens)
 and set it as environment variables — see [Setup](#setup) below.
@@ -42,7 +44,8 @@ and set it as environment variables — see [Setup](#setup) below.
 > Tokens with insufficient scopes silently return 0 results rather than an error,
 > making it look like there are no open CVE issues.
 
-**Gmail OAuth credentials** *(if querying Prograde emails)*
+#### Gmail OAuth credentials *(if querying Prograde emails)*
+
 OAuth credentials are required to read Gmail. On the first run, a browser window
 opens for authorization. Place your credentials file at:
 ```
@@ -54,7 +57,10 @@ see [Team collaboration](#team-collaboration-sharing-prograde-data) below.
 
 ### Required for `/verify-cves-in-builds` and `/run-cve-check-pipeline`
 
-**podman** — used to pull and inspect container images:
+#### podman
+
+Used to pull and inspect container images:
+
 ```bash
 # macOS
 brew install podman
