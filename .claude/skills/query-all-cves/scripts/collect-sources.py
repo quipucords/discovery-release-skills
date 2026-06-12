@@ -141,10 +141,13 @@ elif args.use_provided_prograde:
          "cve-data/jira.json"),
     ]
 else:
+    prograde_label = os.environ.get("PROGRADE_LABEL", "")
+    gmail_cmd = ["uv", "run", f"{skills}/query-gmail/scripts/query-gmail.py"]
+    if prograde_label:
+        gmail_cmd += ["--label", prograde_label]
+    gmail_cmd += ["--since", since]
     parallel_jobs = [
-        ("gmail", ["uv", "run", f"{skills}/query-gmail/scripts/query-gmail.py",
-                   "--label", "alerts/prograde", "--since", since],
-         "cve-data/prograde-emails.json"),
+        ("gmail", gmail_cmd, "cve-data/prograde-emails.json"),
         ("jira",  ["uv", "run", f"{skills}/query-jira-cves/scripts/query-jira-cves.py",
                    "--summary-contains", "CVE"],
          "cve-data/jira.json"),

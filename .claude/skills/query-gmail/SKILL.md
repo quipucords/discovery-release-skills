@@ -34,7 +34,7 @@ python3 .claude/skills/check-location.py
 
 # Fetch Prograde emails since a given date and save for downstream processing
 uv run .claude/skills/query-gmail/scripts/query-gmail.py \
-  --label "alerts/prograde" \
+  --label "$PROGRADE_LABEL" \
   --since "2026-05-01" \
   > cve-data/prograde-emails.json
 

@@ -259,7 +259,7 @@ OUTPUT FORMAT:
 
 EXAMPLES:
   # Query Prograde emails from last 30 days
-  %(prog)s --label "alerts/prograde" --since "2026-05-03"
+  %(prog)s --label "$PROGRADE_LABEL" --since "2026-05-03"
 
   # Query emails from specific sender
   %(prog)s --from "$PROGRADE_SENDER" --max-results 50
@@ -268,10 +268,10 @@ EXAMPLES:
   %(prog)s --subject-regex "\\[Prograde\\].*Important" --since "2026-04-01"
 
   # Pipe to parse-prograde-advisories.py
-  %(prog)s --label "alerts/prograde" --since "2026-05-01" | parse-prograde-advisories.py
+  %(prog)s --label "$PROGRADE_LABEL" --since "2026-05-01" | parse-prograde-advisories.py
 
   # Save to file for later processing
-  %(prog)s --label "alerts/prograde" --since "2026-05-01" > prograde-emails.json
+  %(prog)s --label "$PROGRADE_LABEL" --since "2026-05-01" > prograde-emails.json
 
 AUTHENTICATION:
   Uses Gmail API with OAuth2. Credentials path:

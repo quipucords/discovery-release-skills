@@ -95,7 +95,8 @@ every Claude Code session. This file is never committed to any repository.
     "JIRA_API_TOKEN": "your-api-token",
     "ERRATA_HOST": "your-errata-host",
     "BREW_HOST": "your-brew-host",
-    "PROGRADE_SENDER": "your-prograde-sender"
+    "PROGRADE_SENDER": "your-prograde-sender",
+    "PROGRADE_LABEL": "your-prograde-label"
   }
 }
 ```
@@ -112,6 +113,11 @@ every Claude Code session. This file is never committed to any repository.
 > Prograde security notification emails. Used with `query-gmail --from "$PROGRADE_SENDER"`
 > to filter Gmail results by sender. Red Hat employees: ask a teammate if you don't
 > know the address.
+>
+> **`PROGRADE_LABEL`** — optional. Gmail label applied to Prograde notification
+> emails. Used with `query-gmail --label "$PROGRADE_LABEL"` to filter by label.
+> If unset, the `--label` flag is omitted and query-gmail returns all matching emails
+> regardless of label.
 
 Alternatively, set them in `.claude/settings.local.json` (project-local, gitignored)
 if you prefer to keep them scoped to this project.
@@ -129,7 +135,8 @@ your `~/.claude/settings.json` or `.claude/settings.local.json`:
     "JIRA_API_TOKEN": "your-api-token",
     "ERRATA_HOST": "your-errata-host",
     "BREW_HOST": "your-brew-host",
-    "PROGRADE_SENDER": "your-prograde-sender"
+    "PROGRADE_SENDER": "your-prograde-sender",
+    "PROGRADE_LABEL": "your-prograde-label"
   },
   "permissions": {
     "allow": [
@@ -182,7 +189,7 @@ The teammate who receives Prograde emails runs the Gmail query step directly:
 
 ```bash
 uv run .claude/skills/query-gmail/scripts/query-gmail.py \
-  --label alerts/prograde \
+  --label "$PROGRADE_LABEL" \
   --since 2025-01-01 \
   > cve-data/prograde-emails.json
 ```

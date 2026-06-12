@@ -175,7 +175,7 @@ OUTPUT FORMAT:
 
 EXAMPLES:
   # From stdin (piped from query-gmail.py)
-  query-gmail.py --label "alerts/prograde" --since "2026-05-01" | %(prog)s
+  query-gmail.py --label "$PROGRADE_LABEL" --since "2026-05-01" | %(prog)s
 
   # From file
   %(prog)s prograde-emails.json
