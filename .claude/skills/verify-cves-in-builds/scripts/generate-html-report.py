@@ -211,6 +211,8 @@ CSS = """
 
   /* ── Summary cards ───────────────────────────────────────────────────── */
   .cards { display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 2rem; }
+  /* Comparison cards are simpler (no image URL, no 2×2 grid) — allow them to shrink */
+  .cards-compare .card { min-width: 0; }
   .card {
     background: var(--surface);
     border: 1px solid var(--border);
@@ -750,6 +752,7 @@ if mode == "comparison":
     subtitle      = (f"Generated {escape(datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC'))}"
                      f"&nbsp;·&nbsp; Data at: {escape(generated_at[:19].replace('T', ' '))} UTC")
     cards_html    = comparison_summary_cards_html(data)
+    cards_class   = "cards-compare"
     action_html   = comparison_action_required_html(cves)
     filters_html  = """
     <label for="f-delta">Delta</label>
@@ -823,6 +826,7 @@ else:  # single-set mode
     subtitle         = (f"Generated {escape(datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC'))}"
                         f"&nbsp;·&nbsp; Data verified at: {escape(verified_at[:19].replace('T', ' '))} UTC")
     cards_html       = summary_cards_html()
+    cards_class      = ""
     action_html      = action_required_html()
     container_options = "\n".join(
         f'<option value="{c.split("/")[-1]}">{c.split("/")[-1]}</option>'
@@ -911,7 +915,7 @@ html = f"""<!DOCTYPE html>
 
 <div class="main">
 
-  <div class="cards">{cards_html}</div>
+  <div class="cards {cards_class}">{cards_html}</div>
 
   {action_html}
 
