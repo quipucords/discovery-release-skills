@@ -268,6 +268,7 @@ CSS = """
   .action-required ul { list-style: disc; padding-left: 1.25rem; font-size: 0.875rem; color: var(--action-text); }
   .action-required li { margin: 0.3rem 0; }
   .action-required a  { color: var(--action-link); }
+  .cve-pkg { opacity: 0.65; font-style: italic; }
 
   /* ── Pending-release banner (tier 2 — just cut a release) ────────────── */
   .action-release {
@@ -658,12 +659,16 @@ def comparison_action_required_html(cves: list) -> str:
     def cve_list_html(group: list) -> str:
         parts = ["<ul>"]
         for cve in group:
-            cve_id   = cve.get("cve_id", "")
-            cve_link = cve.get("cve_link", f"https://access.redhat.com/security/cve/{cve_id}")
-            sev      = cve.get("severity") or "Unknown"
+            cve_id    = cve.get("cve_id", "")
+            cve_link  = cve.get("cve_link", f"https://access.redhat.com/security/cve/{cve_id}")
+            sev       = cve.get("severity") or "Unknown"
+            pkg_names = cve.get("package_names", [])
+            pkg_str   = (f' <span class="cve-pkg">({escape(", ".join(pkg_names))})</span>'
+                         if pkg_names else "")
             parts.append(
                 f'<li>{sev_badge(sev)} '
-                f'<a href="{escape(cve_link)}" target="_blank">{escape(cve_id)}</a></li>'
+                f'<a href="{escape(cve_link)}" target="_blank">{escape(cve_id)}</a>'
+                f'{pkg_str}</li>'
             )
         parts.append("</ul>")
         return "\n".join(parts)
