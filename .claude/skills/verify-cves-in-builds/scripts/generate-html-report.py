@@ -109,9 +109,9 @@ CSS = """
     --status-na:              #9ca3af;
 
     /* Delta badges */
-    --delta-backport:      #7c3aed;
-    --delta-not-fixed:     #dc2626;
-    --delta-regression:    #9a3412;
+    --delta-regression:    #dc2626;
+    --delta-not-fixed:     #9a3412;
+    --delta-release:       #2563eb;
     --delta-unknown:       #b45309;
     --delta-fixed-both:    #16a34a;
   }
@@ -160,9 +160,9 @@ CSS = """
       --status-fix-unknown:     #eab308;
       --status-na:              #6b7280;
 
-      --delta-backport:      #a78bfa;
-      --delta-not-fixed:     #ef4444;
-      --delta-regression:    #fb923c;
+      --delta-regression:    #ef4444;
+      --delta-not-fixed:     #fb923c;
+      --delta-release:       #60a5fa;
       --delta-unknown:       #f59e0b;
       --delta-fixed-both:    #22c55e;
     }
@@ -322,9 +322,9 @@ CSS = """
   .status-fix-unknown     { background: var(--status-fix-unknown); }
   .status-na              { background: var(--status-na); }
   /* Delta badges */
-  .delta-backport     { background: var(--delta-backport); }
-  .delta-not-fixed    { background: var(--delta-not-fixed); }
   .delta-regression   { background: var(--delta-regression); }
+  .delta-not-fixed    { background: var(--delta-not-fixed); }
+  .delta-release      { background: var(--delta-release); }
   .delta-unknown      { background: var(--delta-unknown); }
   .delta-fixed-both   { background: var(--delta-fixed-both); }
 
@@ -361,9 +361,9 @@ def status_badge(status_key, label):
 
 
 DELTA_META = {
-    "fixed_upstream_not_downstream": ("delta-backport",  "Backport needed"),
-    "not_fixed_in_either":           ("delta-not-fixed", "Not fixed anywhere"),
     "fixed_downstream_not_upstream": ("delta-regression","Regression"),
+    "not_fixed_in_either":           ("delta-not-fixed", "Not fixed anywhere"),
+    "fixed_upstream_not_downstream": ("delta-release",   "Pending release"),
     "unknown":                       ("delta-unknown",   "Unknown"),
     "fixed_in_both":                 ("delta-fixed-both","Fixed everywhere"),
 }
@@ -395,9 +395,9 @@ def status_cell(entry: dict | None) -> str:
 
 
 DELTA_SORT_ORDER = {d: i for i, d in enumerate([
-    "fixed_upstream_not_downstream",
-    "not_fixed_in_either",
-    "fixed_downstream_not_upstream",
+    "fixed_downstream_not_upstream",  # regression — most alarming
+    "not_fixed_in_either",            # no fix anywhere
+    "fixed_upstream_not_downstream",  # pending downstream release (normal)
     "unknown",
     "fixed_in_both",
 ])}
@@ -577,11 +577,11 @@ def comparison_summary_cards_html(data: dict) -> str:
     """Summary cards for comparison mode — one card per delta category."""
     summary = data.get("summary", {})
     delta_display = [
-        ("fixed_upstream_not_downstream", "Backport needed",  "stat-not-fixed"),
+        ("fixed_downstream_not_upstream", "Regression",        "stat-not-fixed"),
         ("not_fixed_in_either",           "Not fixed anywhere","stat-not-fixed"),
-        ("fixed_downstream_not_upstream", "Regression",       "stat-no-pkg-data"),
-        ("unknown",                       "Unknown",          "stat-no-pkg-data"),
-        ("fixed_in_both",                 "Fixed everywhere", "stat-fixed"),
+        ("fixed_upstream_not_downstream", "Pending release",   "stat-no-pkg-data"),
+        ("unknown",                       "Unknown",           "stat-no-pkg-data"),
+        ("fixed_in_both",                 "Fixed everywhere",  "stat-fixed"),
     ]
     parts = []
     for key, label, css in delta_display:
@@ -606,9 +606,9 @@ def comparison_action_required_html(cves: list) -> str:
         by_delta.setdefault(cve.get("delta", "unknown"), []).append(cve)
 
     action_deltas = [
-        "fixed_upstream_not_downstream",
-        "not_fixed_in_either",
         "fixed_downstream_not_upstream",
+        "not_fixed_in_either",
+        "fixed_upstream_not_downstream",
         "unknown",
     ]
     if not any(by_delta.get(d) for d in action_deltas):
@@ -616,12 +616,13 @@ def comparison_action_required_html(cves: list) -> str:
 
     parts = ['<div class="action-required"><h2>⚠ ACTION REQUIRED</h2>']
 
-    group = sorted(by_delta.get("fixed_upstream_not_downstream", []),
+    group = sorted(by_delta.get("fixed_downstream_not_upstream", []),
                    key=lambda c: -SEVERITY_ORDER.get(c.get("severity") or "Unknown", 0))
     if group:
-        parts.append("<h3>Backport candidates — fixed upstream, NOT fixed downstream</h3>")
-        parts.append("<p>These fixes exist in the upstream quay.io images but have not yet "
-                     "been shipped in the downstream registry.redhat.io images.</p><ul>")
+        parts.append("<h3>🚨 Upstream regression — fixed downstream but NOT in upstream</h3>")
+        parts.append("<p>The downstream Discovery release contains these fixes, but they have been "
+                     "lost from the upstream quipucords codebase. This is unexpected and needs "
+                     "immediate investigation. Find and restore the fix upstream.</p><ul>")
         for cve in group:
             cve_id   = cve.get("cve_id", "")
             cve_link = cve.get("cve_link", f"https://access.redhat.com/security/cve/{cve_id}")
@@ -635,7 +636,10 @@ def comparison_action_required_html(cves: list) -> str:
     group = sorted(by_delta.get("not_fixed_in_either", []),
                    key=lambda c: -SEVERITY_ORDER.get(c.get("severity") or "Unknown", 0))
     if group:
-        parts.append("<h3>Not fixed in either downstream or upstream</h3><ul>")
+        parts.append("<h3>Not fixed anywhere — fix needs to be developed</h3>")
+        parts.append("<p>Neither the upstream quipucords build nor the downstream Discovery release "
+                     "contains a fix for these CVEs. Develop and merge the fix upstream first; "
+                     "a downstream release will then pick it up.</p><ul>")
         for cve in group:
             cve_id   = cve.get("cve_id", "")
             cve_link = cve.get("cve_link", f"https://access.redhat.com/security/cve/{cve_id}")
@@ -646,12 +650,13 @@ def comparison_action_required_html(cves: list) -> str:
             )
         parts.append("</ul>")
 
-    group = sorted(by_delta.get("fixed_downstream_not_upstream", []),
+    group = sorted(by_delta.get("fixed_upstream_not_downstream", []),
                    key=lambda c: -SEVERITY_ORDER.get(c.get("severity") or "Unknown", 0))
     if group:
-        parts.append("<h3>⚠ Regression — fixed downstream but NOT in upstream</h3>")
-        parts.append("<p>These fixes are present in the downstream release but have been "
-                     "lost in the upstream build. Investigate upstream.</p><ul>")
+        parts.append("<h3>Pending downstream release — fixed upstream, not yet in downstream</h3>")
+        parts.append("<p>The fix has been merged to the upstream quipucords codebase but has not yet "
+                     "been shipped in a downstream Discovery release. Cut a new release to deliver "
+                     "these fixes. This is the normal release workflow.</p><ul>")
         for cve in group:
             cve_id   = cve.get("cve_id", "")
             cve_link = cve.get("cve_link", f"https://access.redhat.com/security/cve/{cve_id}")
@@ -713,9 +718,9 @@ if mode == "comparison":
     <label for="f-delta">Delta</label>
     <select id="f-delta" onchange="applyFilters()">
       <option value="">All</option>
-      <option value="fixed_upstream_not_downstream">Backport needed</option>
-      <option value="not_fixed_in_either">Not fixed anywhere</option>
       <option value="fixed_downstream_not_upstream">Regression</option>
+      <option value="not_fixed_in_either">Not fixed anywhere</option>
+      <option value="fixed_upstream_not_downstream">Pending release</option>
       <option value="unknown">Unknown</option>
       <option value="fixed_in_both">Fixed everywhere</option>
     </select>
@@ -757,8 +762,8 @@ if mode == "comparison":
   }
   countEl.textContent = visible + ' row' + (visible !== 1 ? 's' : '');"""
     js_default_sort = """
-  const deltaOrder = {fixed_upstream_not_downstream:0, not_fixed_in_either:1,
-                      fixed_downstream_not_upstream:2, unknown:3, fixed_in_both:4};
+  const deltaOrder = {fixed_downstream_not_upstream:0, not_fixed_in_either:1,
+                      fixed_upstream_not_downstream:2, unknown:3, fixed_in_both:4};
   const sevOrder   = {Critical:4, Important:3, Moderate:2, Low:1, Unknown:0};
   const rows = Array.from(tbody.rows);
   rows.sort((a, b) => {

@@ -52,9 +52,9 @@ def print_comparison_report(data: dict) -> None:
         by_delta.setdefault(cve.get("delta", "unknown"), []).append(cve)
 
     action_deltas = [
-        "fixed_upstream_not_downstream",
-        "not_fixed_in_either",
         "fixed_downstream_not_upstream",
+        "not_fixed_in_either",
+        "fixed_upstream_not_downstream",
         "unknown",
     ]
     has_action = any(by_delta.get(d) for d in action_deltas)
@@ -63,11 +63,11 @@ def print_comparison_report(data: dict) -> None:
         print("  *** ACTION REQUIRED ***")
         print()
 
-        group = sorted(by_delta.get("fixed_upstream_not_downstream", []), key=sev_key)
+        group = sorted(by_delta.get("fixed_downstream_not_upstream", []), key=sev_key)
         if group:
-            print(f"  Backport candidates — fixed upstream, NOT fixed downstream ({len(group)} CVE(s)):")
-            print("  (These fixes exist in the upstream quay.io images but have not yet been")
-            print("   shipped in the downstream registry.redhat.io images.)")
+            print(f"  *** UPSTREAM REGRESSION — fixed downstream but NOT in upstream ({len(group)} CVE(s)) ***")
+            print("  (The downstream release contains this fix, but it has been lost from the upstream")
+            print("   quipucords codebase. Investigate the upstream regression immediately.)")
             print()
             for cve in group:
                 print(f"    [{(cve.get('severity') or '?'):9s}] {cve['cve_id']}")
@@ -77,16 +77,19 @@ def print_comparison_report(data: dict) -> None:
         group = sorted(by_delta.get("not_fixed_in_either", []), key=sev_key)
         if group:
             print(f"  Not fixed in either downstream or upstream ({len(group)} CVE(s)):")
+            print("  (The fix does not yet exist in the quipucords codebase. Develop and merge the fix upstream.")
+            print("   Once upstream is fixed, a downstream release will pick it up.)")
             print()
             for cve in group:
                 print(f"    [{(cve.get('severity') or '?'):9s}] {cve['cve_id']}")
                 print(f"               {cve.get('cve_link', '')}")
             print()
 
-        group = sorted(by_delta.get("fixed_downstream_not_upstream", []), key=sev_key)
+        group = sorted(by_delta.get("fixed_upstream_not_downstream", []), key=sev_key)
         if group:
-            print(f"  Regression — fixed downstream but NOT in upstream ({len(group)} CVE(s)):")
-            print("  (These fixes are present in the downstream release but have been lost in upstream.)")
+            print(f"  Pending downstream release — fixed upstream, not yet in downstream ({len(group)} CVE(s)):")
+            print("  (The fix has been merged to the upstream quipucords codebase. Cut a new downstream")
+            print("   Discovery release to ship it.)")
             print()
             for cve in group:
                 print(f"    [{(cve.get('severity') or '?'):9s}] {cve['cve_id']}")

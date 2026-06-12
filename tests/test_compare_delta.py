@@ -71,5 +71,11 @@ def test_cve_delta_all_fixed():
 
 
 def test_delta_priority_first_is_most_urgent():
-    assert DELTA_PRIORITY[0] == "fixed_upstream_not_downstream"
+    assert DELTA_PRIORITY[0] == "fixed_downstream_not_upstream"
     assert DELTA_PRIORITY[-1] == "fixed_in_both"
+
+
+def test_regression_beats_pending_release():
+    # A container with a regression should outrank one just pending a release
+    deltas = {"server": "fixed_upstream_not_downstream", "ui": "fixed_downstream_not_upstream"}
+    assert cve_delta(deltas) == "fixed_downstream_not_upstream"
