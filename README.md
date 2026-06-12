@@ -94,7 +94,8 @@ every Claude Code session. This file is never committed to any repository.
     "JIRA_EMAIL": "you@redhat.com",
     "JIRA_API_TOKEN": "your-api-token",
     "ERRATA_HOST": "your-errata-host",
-    "BREW_HOST": "your-brew-host"
+    "BREW_HOST": "your-brew-host",
+    "PROGRADE_SENDER": "your-prograde-sender"
   }
 }
 ```
@@ -106,6 +107,11 @@ every Claude Code session. This file is never committed to any repository.
 > **`BREW_HOST`** — optional. Only needed if you construct Brew UI links manually
 > from `query-errata-advisory` output (see the `build_id` field). Set to your
 > organization's internal Brew instance hostname.
+>
+> **`PROGRADE_SENDER`** — optional. The sender address for your organization's
+> Prograde security notification emails. Used with `query-gmail --from "$PROGRADE_SENDER"`
+> to filter Gmail results by sender. Red Hat employees: ask a teammate if you don't
+> know the address.
 
 Alternatively, set them in `.claude/settings.local.json` (project-local, gitignored)
 if you prefer to keep them scoped to this project.
@@ -122,7 +128,8 @@ your `~/.claude/settings.json` or `.claude/settings.local.json`:
     "JIRA_EMAIL": "you@redhat.com",
     "JIRA_API_TOKEN": "your-api-token",
     "ERRATA_HOST": "your-errata-host",
-    "BREW_HOST": "your-brew-host"
+    "BREW_HOST": "your-brew-host",
+    "PROGRADE_SENDER": "your-prograde-sender"
   },
   "permissions": {
     "allow": [

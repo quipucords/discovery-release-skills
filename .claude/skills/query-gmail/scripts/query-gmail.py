@@ -262,7 +262,7 @@ EXAMPLES:
   %(prog)s --label "alerts/prograde" --since "2026-05-03"
 
   # Query emails from specific sender
-  %(prog)s --from "literal:<PROGRADE_SENDER>" --max-results 50
+  %(prog)s --from "$PROGRADE_SENDER" --max-results 50
 
   # Query with subject regex
   %(prog)s --subject-regex "\\[Prograde\\].*Important" --since "2026-04-01"
