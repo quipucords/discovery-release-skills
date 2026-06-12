@@ -251,40 +251,35 @@ these MUST appear in your response exactly as printed, word for word.
 
 ### Step 6.5 — Classify UNKNOWN packages with LLM knowledge
 
-Before generating the HTML report, identify all packages that landed in UNKNOWN
-status and use your knowledge to annotate them with their ecosystem and a brief
-description.
+Run the classification helper to find UNKNOWN packages and check which are
+already annotated in `cve-data/package-types.json`:
 
-**How to find them:**
-
-- **Compare mode:** read `cve-data/comparison.json`; collect `package_names` from CVEs
-  where `delta == "unknown"`.
-- **Single-set mode:** read the verified-cves JSON; collect `package_names` from CVEs
-  where any `checked_containers` entry has `package_found == false` and
-  `searched_names == []`.
-
-For each **unique** package name, use your LLM knowledge to produce:
-- `ecosystem` — one of: `"npm"`, `"pip"`, `"gem"`, `"go"`, `"maven"`, or `"unknown"`
-- `description` — one sentence: what is this package and why might it appear here?
-
-If you genuinely don't recognise a package, set `ecosystem` to `"unknown"` and
-`description` to `"Package type unknown — investigate manually."`.
-
-Write the result to `cve-data/package-types.json` in this format:
-```json
-{
-  "Axios": {
-    "ecosystem": "npm",
-    "description": "Popular JavaScript HTTP client for Node.js and browsers; likely a Discovery UI frontend dependency"
-  },
-  "fast-uri": {
-    "ecosystem": "npm",
-    "description": "Fast URI parsing library for JavaScript/Node.js; likely a transitive UI dependency"
-  }
-}
+**Compare mode:**
+```bash
+python3 .claude/skills/verify-cves-in-builds/scripts/find-unknown-packages.py --comparison
 ```
 
-If there are no UNKNOWN packages, skip this step and omit `--package-types-file` below.
+**Downstream only:**
+```bash
+python3 .claude/skills/verify-cves-in-builds/scripts/find-unknown-packages.py --set downstream
+```
+
+**Upstream only:**
+```bash
+python3 .claude/skills/verify-cves-in-builds/scripts/find-unknown-packages.py --set upstream
+```
+
+The script exits 0 (all classified or none found — skip to Step 7, omit
+`--package-types-file`) or exits 1 and prints the unclassified package names
+to stdout as JSON.
+
+If it exits 1, use your LLM knowledge to add an entry for each unclassified
+package to `cve-data/package-types.json`:
+- `ecosystem` — one of: `"npm"`, `"pip"`, `"gem"`, `"go"`, `"maven"`, or `"unknown"`
+- `description` — one sentence describing what the package is
+
+If you don't recognise a package, use `"ecosystem": "unknown"` and
+`"description": "Package type unknown — investigate manually."`
 
 ### Step 7 — Generate HTML report
 
