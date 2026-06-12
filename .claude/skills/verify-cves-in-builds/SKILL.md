@@ -55,16 +55,16 @@ AskUserQuestion({
     "multiSelect": false,
     "options": [
       {
+        "label": "Compare downstream vs. upstream",
+        "description": "Check both registries and produce a delta report: regressions, unfixed CVEs, and which upstream fixes are pending a downstream release."
+      },
+      {
         "label": "Downstream only",
         "description": "Check registry.redhat.io/discovery images. Use to verify the current downstream release."
       },
       {
         "label": "Upstream only",
         "description": "Check quay.io/quipucords images. Use to verify the upstream quipucords build before cutting a release."
-      },
-      {
-        "label": "Compare downstream vs. upstream",
-        "description": "Check both registries and produce a delta report: regressions, unfixed CVEs, and which upstream fixes are pending a downstream release."
       }
     ]
   }]
