@@ -35,9 +35,9 @@ and [Setup](#setup) sections below.
 
 | Skill | What it does |
 |-------|-------------|
-| `/run-cve-check-pipeline` | **One-stop shop.** Collects CVE data from all sources, then verifies which CVEs are present/fixed in actual container builds. Produces `cve-data/unified-cves.json`, `cve-data/verified-cves.json`, and `cve-data/cve-report.html`. |
+| `/run-cve-check-pipeline` | **One-stop shop.** Collects CVE data from all sources, then verifies builds. Supports three modes: downstream only, upstream only, or a side-by-side comparison that highlights regressions and upstream fixes pending a downstream release. |
 | `/query-all-cves` | Data collection only. Queries all sources and produces `cve-data/unified-cves.json`. Use this if you don't need build verification. |
-| `/verify-cves-in-builds` | Build verification only. Pulls container images and checks which CVEs from an existing `unified-cves.json` are present or fixed. Requires `unified-cves.json` from a prior `query-all-cves` run. |
+| `/verify-cves-in-builds` | Build verification only. Pulls container images and checks which CVEs from an existing `unified-cves.json` are present or fixed. Three modes: **downstream only** (check the released Discovery images), **upstream only** (check quipucords before cutting a release), or **compare** (delta report across both). Requires `unified-cves.json` from a prior `query-all-cves` run. |
 
 ### Data source skills (called automatically by the pipeline)
 
@@ -104,11 +104,11 @@ podman machine init && podman machine start
 sudo dnf install -y podman
 ```
 
-**Downstream images only:** `registry.redhat.io` requires authentication:
+**Downstream images** (`registry.redhat.io`) require authentication:
 ```bash
 podman login registry.redhat.io   # Red Hat Customer Portal credentials
 ```
-Public Quay.io images (the default) do not require login.
+Upstream images (`quay.io/quipucords`) are public and do not require login. In upstream-only mode the login check is skipped automatically.
 
 ---
 
@@ -166,11 +166,14 @@ via `subprocess` and do not need allowlist entries.
 
 All output is written to `cve-data/` (gitignored):
 
-| File | Contents |
-|------|----------|
-| `cve-data/unified-cves.json` | All reported CVEs with severity, advisory links, and fix data |
-| `cve-data/verified-cves.json` | Per-container verification: fixed / not fixed / UNKNOWN / not found |
-| `cve-data/cve-report.html` | Visual HTML report — open in a browser (`open` on macOS, `xdg-open` on Linux) |
+| File | Mode | Contents |
+|------|------|----------|
+| `cve-data/unified-cves.json` | all | All reported CVEs with severity, advisory links, and fix data |
+| `cve-data/verified-cves-downstream.json` | downstream / compare | Per-container verification for downstream images |
+| `cve-data/verified-cves-upstream.json` | upstream / compare | Per-container verification for upstream images |
+| `cve-data/comparison.json` | compare | Delta between downstream and upstream per CVE |
+| `cve-data/cve-report.html` | all | Visual HTML report — open in a browser (`open` on macOS, `xdg-open` on Linux) |
 
 The HTML report is filterable and sortable, supports light and dark mode, and
-prominently calls out any CVEs that require manual investigation.
+prominently calls out CVEs by priority: upstream regressions first, then unfixed
+CVEs, then upstream fixes that are pending a downstream release.
