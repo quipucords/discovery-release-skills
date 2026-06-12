@@ -8,50 +8,8 @@ optionally verify which CVEs are present or already fixed in a specific containe
 build.
 
 Skills are located in `.claude/skills/` and are auto-discovered by Claude Code.
-
----
-
-## Quick Start
-
-The fastest way to get a complete CVE status report is:
-
-```
-/run-cve-check-pipeline
-```
-
-This single command runs the full pipeline end-to-end — collecting CVE data from
-all configured sources, verifying which CVEs are fixed or still present in the
-container builds, and producing both a machine-readable JSON report and a visual
-HTML report you can open in a browser.
-
-Before running it for the first time, complete the [Prerequisites](#prerequisites)
-and [Setup](#setup) sections below.
-
----
-
-## Skills
-
-### Pipeline skills (invoke these directly)
-
-| Skill | What it does |
-|-------|-------------|
-| `/run-cve-check-pipeline` | **One-stop shop.** Collects CVE data from all sources, then verifies builds. Supports three modes: downstream only, upstream only, or a side-by-side comparison that highlights regressions and upstream fixes pending a downstream release. |
-| `/query-all-cves` | Data collection only. Queries all sources and produces `cve-data/unified-cves.json`. Use this if you don't need build verification. |
-| `/verify-cves-in-builds` | Build verification only. Pulls container images and checks which CVEs from an existing `unified-cves.json` are present or fixed. Three modes: **downstream only** (check the released Discovery images), **upstream only** (check quipucords before cutting a release), or **compare** (delta report across both). Requires `unified-cves.json` from a prior `query-all-cves` run. |
-
-### Data source skills (called automatically by the pipeline)
-
-| Skill | Source |
-|-------|--------|
-| `/query-gmail` | Prograde CVE advisory notification emails via Gmail |
-| `/parse-prograde-advisories` | Parses Prograde email HTML into structured advisory data |
-| `/query-redhat-catalog` | CVEs in the published downstream Discovery images |
-| `/query-jira-cves` | Internally tracked CVEs in the DISCOVERY JIRA project |
-| `/query-errata-advisory` | CVE IDs and fixed package NVRs for a given advisory |
-| `/merge-cve-data` | Merges data from any combination of the above sources |
-
-You rarely need to invoke the data source skills directly — the pipeline skills
-handle orchestration.
+Once you've completed [Prerequisites](#prerequisites) and [Setup](#setup),
+see [Quick Start](#quick-start) to run your first report.
 
 ---
 
@@ -90,7 +48,7 @@ opens for authorization. Place your credentials file at:
 ```
 See the [Gmail API Quickstart](https://developers.google.com/gmail/api/quickstart/python)
 for how to obtain credentials. If you don't receive Prograde advisory emails,
-you can skip the Gmail step when prompted by the pipeline skill.
+see [Team collaboration](#team-collaboration-sharing-prograde-data) below.
 
 ### Required for `/verify-cves-in-builds` and `/run-cve-check-pipeline`
 
@@ -109,53 +67,6 @@ sudo dnf install -y podman
 podman login registry.redhat.io   # Red Hat Customer Portal credentials
 ```
 Upstream images (`quay.io/quipucords`) are public and do not require login. In upstream-only mode the login check is skipped automatically.
-
----
-
-## Team collaboration: sharing Prograde data
-
-Prograde CVE advisory emails are only delivered to a subset of team members. If
-you don't receive them, you can still get a complete CVE report — you just need a
-teammate to export the raw email data and share it with you.
-
-### Step 1 — Teammate exports the file
-
-The teammate who receives Prograde emails runs the Gmail query step directly:
-
-```bash
-uv run .claude/skills/query-gmail/scripts/query-gmail.py \
-  --label alerts/prograde \
-  --since 2025-01-01 \
-  > cve-data/prograde-emails.json
-```
-
-Replace `2025-01-01` with the date range you want to cover (typically the date
-of the last downstream Discovery release). The output is a plain JSON file with
-no secrets or credentials — it is safe to share over Slack or email.
-
-### Step 2 — You receive the file
-
-Place the file your teammate sent you at `cve-data/prograde-emails.json` inside
-this project directory. Create `cve-data/` first if it doesn't exist:
-
-```bash
-mkdir -p cve-data
-# then copy or move the file here
-```
-
-### Step 3 — Run the pipeline using the provided file
-
-When prompted by `/run-cve-check-pipeline`, choose:
-
-> **No — use provided json file**
-
-The pipeline will skip the Gmail query and read `cve-data/prograde-emails.json`
-directly. All subsequent steps (parsing, errata lookups, merging) run normally,
-so the resulting report is just as complete as if you had Gmail access.
-
-> **Note:** If you accidentally select "No — skip Prograde" instead, the
-> pipeline will overwrite your file with an empty stub. Re-copy the file from
-> your teammate before running again.
 
 ---
 
@@ -206,6 +117,94 @@ via `subprocess` and do not need allowlist entries.
 > **Important:** Always invoke skills from the project root directory (the directory
 > containing `.claude/`). The skills verify this and will exit with a clear error
 > if you are in the wrong directory.
+
+---
+
+## Quick Start
+
+The fastest way to get a complete CVE status report is:
+
+```
+/run-cve-check-pipeline
+```
+
+This single command runs the full pipeline end-to-end — collecting CVE data from
+all configured sources, verifying which CVEs are fixed or still present in the
+container builds, and producing both a machine-readable JSON report and a visual
+HTML report you can open in a browser.
+
+---
+
+## Team collaboration: sharing Prograde data
+
+Prograde CVE advisory emails are only delivered to a subset of team members. If
+you don't receive them, you can still get a complete CVE report — you just need a
+teammate to export the raw email data and share it with you.
+
+### Step 1 — Teammate exports the file
+
+The teammate who receives Prograde emails runs the Gmail query step directly:
+
+```bash
+uv run .claude/skills/query-gmail/scripts/query-gmail.py \
+  --label alerts/prograde \
+  --since 2025-01-01 \
+  > cve-data/prograde-emails.json
+```
+
+Replace `2025-01-01` with the date range you want to cover (typically the date
+of the last downstream Discovery release). The output is a plain JSON file with
+no secrets or credentials — it is safe to share over Slack or email.
+
+### Step 2 — You receive the file
+
+Place the file your teammate sent you at `cve-data/prograde-emails.json` inside
+this project directory. Create `cve-data/` first if it doesn't exist:
+
+```bash
+mkdir -p cve-data
+# then copy or move the file here
+```
+
+### Step 3 — Run the pipeline using the provided file
+
+When prompted by `/run-cve-check-pipeline`, choose:
+
+> **No — use provided json file**
+
+The pipeline will skip the Gmail query and read `cve-data/prograde-emails.json`
+directly. All subsequent steps (parsing, errata lookups, merging) run normally,
+so the resulting report is just as complete as if you had Gmail access.
+
+> **Note:** If you accidentally select "No — skip Prograde" instead, the
+> pipeline will overwrite your file with an empty stub. Re-copy the file from
+> your teammate before running again.
+
+---
+
+## Skills
+
+### Pipeline skills (invoke these directly)
+
+| Skill | What it does |
+|-------|-------------|
+| `/run-cve-check-pipeline` | **One-stop shop.** Collects CVE data from all sources, then verifies builds. Supports three modes: downstream only, upstream only, or a side-by-side comparison that highlights regressions and upstream fixes pending a downstream release. |
+| `/query-all-cves` | Data collection only. Queries all sources and produces `cve-data/unified-cves.json`. Use this if you don't need build verification. |
+| `/verify-cves-in-builds` | Build verification only. Pulls container images and checks which CVEs from an existing `unified-cves.json` are present or fixed. Three modes: **downstream only** (check the released Discovery images), **upstream only** (check quipucords before cutting a release), or **compare** (delta report across both). Requires `unified-cves.json` from a prior `query-all-cves` run. |
+
+### Data source skills (called automatically by the pipeline)
+
+| Skill | Source |
+|-------|--------|
+| `/query-gmail` | Prograde CVE advisory notification emails via Gmail |
+| `/parse-prograde-advisories` | Parses Prograde email HTML into structured advisory data |
+| `/query-redhat-catalog` | CVEs in the published downstream Discovery images |
+| `/query-jira-cves` | Internally tracked CVEs in the DISCOVERY JIRA project |
+| `/query-errata-advisory` | CVE IDs and fixed package NVRs for a given advisory |
+| `/merge-cve-data` | Merges data from any combination of the above sources |
+
+You rarely need to invoke the data source skills directly — the pipeline skills
+handle orchestration.
 
 ---
 
