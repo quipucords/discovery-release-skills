@@ -708,6 +708,20 @@ def comparison_action_required_html(cves: list) -> str:
             + "</div>\n"
         )
 
+    # ── Tier 2: release action only ──────────────────────────────────────────
+    group = sorted(by_delta.get("fixed_upstream_not_downstream", []), key=sev_sort)
+    if group:
+        result += (
+            '<div class="action-release">'
+            "<h2>📦 Release Needed — No code changes required</h2>"
+            "<h3>Fixed upstream, pending downstream release</h3>"
+            "<p>These fixes have been merged to the upstream quipucords codebase. "
+            "No further upstream changes are needed. Cut a new downstream Discovery release "
+            "to ship them.</p>"
+            + cve_list_html(group)
+            + "</div>\n"
+        )
+
     return result
 
 
