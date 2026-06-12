@@ -1,16 +1,15 @@
 ---
 name: verify-cves-in-builds
 description: >
-  Pull discovery-server and discovery-ui container images and verify which CVEs from
-  cve-data/unified-cves.json are still present in those builds. Produces
-  cve-data/verified-cves.json with per-container findings: was the vulnerable package
-  found, what version is installed, and is that version new enough to be fixed?
-  Run after query-all-cves.
+  Pull Discovery container images and verify which CVEs from cve-data/unified-cves.json
+  are still present. Supports single-set mode (downstream only) or dual-set comparison
+  mode (downstream vs. upstream), producing a delta report that highlights backport
+  candidates. Run after query-all-cves.
 compatibility: >
   podman must be installed and in PATH. cve-data/unified-cves.json must exist
-  (run query-all-cves first). Network access to quay.io (or whichever registry
-  hosts the target images) required. No authentication needed for public Quay.io
-  images; run podman login first for private registries.
+  (run query-all-cves first). registry.redhat.io authentication required for downstream
+  images — run `podman login registry.redhat.io` first. Network access to quay.io
+  required for upstream images (no auth needed).
 metadata:
   topic: cve-tracking
 ---
@@ -46,77 +45,101 @@ installed in a real build.
 
 ### Step 1 — Gather options from the user
 
-Use `AskUserQuestion` to present a structured choice — do not ask via plain text
-and wait for a typed reply. This ensures a consistent, predictable UX every time
-the skill is invoked.
+**Question 1: Mode selection**
 
 ```
 AskUserQuestion({
   "questions": [{
-    "question": "Which container images should I verify CVEs against?",
-    "header": "Images",
+    "question": "Do you want to check downstream images only, or compare downstream vs. upstream?",
+    "header": "Mode",
     "multiSelect": false,
     "options": [
       {
-        "label": "Defaults (latest)",
-        "description": "quay.io/quipucords/quipucords:latest and quay.io/quipucords/quipucords-ui:latest"
+        "label": "Downstream only",
+        "description": "Check registry.redhat.io/discovery images. Produces a single-set verification report."
       },
       {
-        "label": "Specific tag",
-        "description": "Use a specific version tag (e.g. :2.5.1) or PR build digest — follow-up question will ask for each"
-      },
-      {
-        "label": "Downstream (registry.redhat.io)",
-        "description": "Check the published downstream images: registry.redhat.io/discovery/discovery-server-rhel9 and discovery-ui-rhel9"
+        "label": "Compare downstream vs. upstream",
+        "description": "Check both registry.redhat.io/discovery (downstream) and quay.io/quipucords (upstream), then produce a delta report showing backport candidates."
       }
     ]
   }]
 })
 ```
 
-If the user selects **Defaults**, use:
-- `--server-image quay.io/quipucords/quipucords:latest`
-- `--ui-image quay.io/quipucords/quipucords-ui:latest`
-
-If the user selects **Specific tag**, present a single follow-up `AskUserQuestion`
-with two questions — one per container. Do not hardcode version numbers; tags change
-with every release. Use "Other" (automatically added) as the primary input path,
-with only "latest" as a named convenience option.
+**Question 2a: If Downstream only — ask two tag questions**
 
 ```
 AskUserQuestion({
   "questions": [
     {
-      "question": "What tag or image should be used for discovery-server?",
-      "header": "Server image",
+      "question": "What tag for the downstream discovery-server image?",
+      "header": "Server tag ↓",
       "multiSelect": false,
       "options": [
-        {"label": "latest", "description": "quay.io/quipucords/quipucords:latest"},
-        {"label": "Custom",  "description": "Type a specific tag (e.g. 2.5.1), digest, or full image URL in the Other field"}
+        {"label": "latest", "description": "registry.redhat.io/discovery/discovery-server-rhel9:latest"},
+        {"label": "Custom", "description": "Type a specific tag (e.g. 2.5) in the Other field"}
       ]
     },
     {
-      "question": "What tag or image should be used for discovery-ui?",
-      "header": "UI image",
+      "question": "What tag for the downstream discovery-ui image?",
+      "header": "UI tag ↓",
       "multiSelect": false,
       "options": [
-        {"label": "latest", "description": "quay.io/quipucords/quipucords-ui:latest"},
-        {"label": "Custom",  "description": "Type a specific tag (e.g. 2.5.1), digest, or full image URL in the Other field"}
+        {"label": "latest", "description": "registry.redhat.io/discovery/discovery-ui-rhel9:latest"},
+        {"label": "Custom", "description": "Type a specific tag (e.g. 2.6) in the Other field"}
       ]
     }
   ]
 })
 ```
 
-If the user selects "latest", use the default image for that container. If the user
-types a value via "Other":
-- If it looks like a full image URL (contains `/` or `:`), use it as-is
-- Otherwise treat it as a tag and append it to the default base image
-  (e.g. `2.5.1` → `quay.io/quipucords/quipucords:2.5.1`)
+**Question 2b: If Compare — ask four tag questions**
 
-If the user selects **Downstream**, use:
-- `--server-image registry.redhat.io/discovery/discovery-server-rhel9:latest`
-- `--ui-image registry.redhat.io/discovery/discovery-ui-rhel9:latest`
+```
+AskUserQuestion({
+  "questions": [
+    {
+      "question": "What tag for downstream discovery-server (registry.redhat.io)?",
+      "header": "DS Server tag",
+      "multiSelect": false,
+      "options": [
+        {"label": "latest", "description": "registry.redhat.io/discovery/discovery-server-rhel9:latest"},
+        {"label": "Custom", "description": "Type a specific tag in the Other field"}
+      ]
+    },
+    {
+      "question": "What tag for downstream discovery-ui (registry.redhat.io)?",
+      "header": "DS UI tag",
+      "multiSelect": false,
+      "options": [
+        {"label": "latest", "description": "registry.redhat.io/discovery/discovery-ui-rhel9:latest"},
+        {"label": "Custom", "description": "Type a specific tag in the Other field"}
+      ]
+    },
+    {
+      "question": "What tag for upstream discovery-server (quay.io/quipucords)?",
+      "header": "US Server tag",
+      "multiSelect": false,
+      "options": [
+        {"label": "latest", "description": "quay.io/quipucords/quipucords:latest"},
+        {"label": "Custom", "description": "Type a specific tag in the Other field"}
+      ]
+    },
+    {
+      "question": "What tag for upstream discovery-ui (quay.io/quipucords)?",
+      "header": "US UI tag",
+      "multiSelect": false,
+      "options": [
+        {"label": "latest", "description": "quay.io/quipucords/quipucords-ui:latest"},
+        {"label": "Custom", "description": "Type a specific tag in the Other field"}
+      ]
+    }
+  ]
+})
+```
+
+If the user selects "Custom" for any tag, use the value they type via "Other" as the tag.
 
 ### Step 2 — Navigate to project root
 
@@ -128,45 +151,72 @@ python3 .claude/skills/check-location.py
 > absolute paths. The allowlist that permits these commands matches the
 > relative form `python3 .claude/skills/...` only.
 
-### Step 1 — Pull images and query installed RPMs (parallel)
+### Step 3 — Pull images and query RPMs
 
-Both images are pulled and queried in parallel internally — no shell background
-jobs needed:
-
+**Downstream only:**
 ```bash
-python3 .claude/skills/verify-cves-in-builds/scripts/pull-and-query-rpms.py --server-image quay.io/quipucords/quipucords:latest --ui-image quay.io/quipucords/quipucords-ui:latest
+python3 .claude/skills/verify-cves-in-builds/scripts/pull-and-query-rpms.py --downstream-server-tag DS_SERVER_TAG --downstream-ui-tag DS_UI_TAG
 ```
 
-Outputs:
-- `cve-data/rpms-server.txt` — full `rpm -qa` list from server image
-- `cve-data/rpms-ui.txt` — full `rpm -qa` list from UI image
-- `cve-data/checked-images.json` — maps container names to image URLs checked
-
-### Step 2 — Compare installed RPMs against CVE fix data
-
+**Compare mode:**
 ```bash
-python3 .claude/skills/verify-cves-in-builds/scripts/check-cves-in-rpms.py
+python3 .claude/skills/verify-cves-in-builds/scripts/pull-and-query-rpms.py --downstream-server-tag DS_SERVER_TAG --downstream-ui-tag DS_UI_TAG --upstream-server-tag US_SERVER_TAG --upstream-ui-tag US_UI_TAG
 ```
 
-Reads `unified-cves.json` and the RPM lists; writes `cve-data/verified-cves.json`.
+Substitute the tag values from Step 1 answers. In dual-set mode all four images are pulled in parallel internally.
 
-### Step 3 — Print summary
+Outputs (downstream only): `cve-data/rpms-server-downstream.txt`, `cve-data/rpms-ui-downstream.txt`, `cve-data/checked-images-downstream.json`
 
+Outputs (compare mode, in addition): `cve-data/rpms-server-upstream.txt`, `cve-data/rpms-ui-upstream.txt`, `cve-data/checked-images-upstream.json`
+
+### Step 4 — Verify CVEs against installed RPMs
+
+**Downstream only:**
+```bash
+python3 .claude/skills/verify-cves-in-builds/scripts/check-cves-in-rpms.py --set downstream
+```
+
+**Compare mode (run both sequentially):**
+```bash
+python3 .claude/skills/verify-cves-in-builds/scripts/check-cves-in-rpms.py --set downstream
+python3 .claude/skills/verify-cves-in-builds/scripts/check-cves-in-rpms.py --set upstream
+```
+
+### Step 5 — Compare results (comparison mode only)
+
+```bash
+python3 .claude/skills/verify-cves-in-builds/scripts/compare-cve-results.py
+```
+
+Skip this step in downstream-only mode.
+
+### Step 6 — Print summary
+
+**Downstream only:**
 ```bash
 python3 .claude/skills/verify-cves-in-builds/scripts/print-verification-summary.py
+```
+
+**Compare mode:**
+```bash
+python3 .claude/skills/verify-cves-in-builds/scripts/print-verification-summary.py --comparison
 ```
 
 **IMPORTANT:** Present the complete output of this script to the user verbatim.
 Do NOT reformat, summarize, or omit any section of it. In particular, any section
 marked `*** ACTION REQUIRED ***` contains items the user must manually verify —
-these MUST appear in your response exactly as printed, word for word. Omitting or
-paraphrasing them defeats the purpose of the check and leaves the user with an
-incomplete picture of their CVE exposure.
+these MUST appear in your response exactly as printed, word for word.
 
-### Step 4 — Generate HTML report
+### Step 7 — Generate HTML report
 
+**Downstream only:**
 ```bash
 python3 .claude/skills/verify-cves-in-builds/scripts/generate-html-report.py
+```
+
+**Compare mode:**
+```bash
+python3 .claude/skills/verify-cves-in-builds/scripts/generate-html-report.py --comparison
 ```
 
 After this runs, explicitly tell the user:
@@ -176,8 +226,9 @@ After this runs, explicitly tell the user:
 > - macOS: `open cve-data/cve-report.html`
 > - Linux: `xdg-open cve-data/cve-report.html`
 >
-> It contains a filterable, sortable table of all CVEs with colour-coded
-> severity and fix status, and repeats the ACTION REQUIRED items prominently.
+> In comparison mode it shows a unified table with downstream and upstream
+> status columns side by side, a Delta column (e.g. "Backport needed"), and
+> an ACTION REQUIRED section listing CVEs that need attention.
 
 ## Output: `cve-data/verified-cves.json`
 
