@@ -213,6 +213,7 @@ CSS = """
   .cards { display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 2rem; }
   /* Comparison cards are simpler (no image URL, no 2×2 grid) — allow them to shrink */
   .cards-compare .card { min-width: 0; }
+  .cards-compare .card-title { text-align: center; }
   .card {
     background: var(--surface);
     border: 1px solid var(--border);
