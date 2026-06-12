@@ -66,7 +66,7 @@ JSON to stdout (one object per invocation):
 - `releases`: fixed package builds keyed by RHEL release, each build including:
   - `nvr`: full Name-Version-Release string
   - `name`, `version`, `release`, `epoch`: parsed components
-  - `build_id`: Brew build ID (links to [internal-brew-host])
+  - `build_id`: Brew build ID (use with `$BREW_HOST` to construct a Brew UI link)
   - `rpms_by_arch`: RPM filenames grouped by architecture
 
 ## Pipeline

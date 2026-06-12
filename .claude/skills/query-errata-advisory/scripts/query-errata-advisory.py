@@ -17,6 +17,7 @@ All logs and errors go to stderr; only JSON results go to stdout.
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -25,6 +26,20 @@ import sys
 def log(message: str) -> None:
     """Log to stderr."""
     print(message, file=sys.stderr)
+
+
+def get_errata_host() -> str:
+    """Get Errata host from ERRATA_HOST env var. Exits with clear error if not set."""
+    host = os.environ.get("ERRATA_HOST")
+    if not host:
+        print(
+            "ERROR: ERRATA_HOST environment variable is not set.\n"
+            "Set it in ~/.claude/settings.json or .claude/settings.local.json:\n"
+            '  "env": { "ERRATA_HOST": "<your-errata-host>" }',
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    return host
 
 
 def check_kerberos_ticket() -> bool:
@@ -57,7 +72,7 @@ def query_advisory(advisory_id: str) -> dict:
         Dict with advisory metadata and extracted CVE IDs from multiple sources
     """
     # Query the full API endpoint to get bugs and jira_issues
-    api_url = f"https://[internal-errata-host]/api/v1/erratum/{advisory_id}"
+    api_url = f"https://{get_errata_host()}/api/v1/erratum/{advisory_id}"
     log(f"Querying advisory API: {api_url}")
 
     try:
@@ -178,7 +193,7 @@ def query_advisory_builds(advisory_id: str) -> dict:
     Returns:
         Dict with builds organized by RHEL release
     """
-    url = f"https://[internal-errata-host]/api/v1/erratum/{advisory_id}/builds"
+    url = f"https://{get_errata_host()}/api/v1/erratum/{advisory_id}/builds"
     log(f"Querying builds API: {url}")
 
     try:
@@ -401,7 +416,7 @@ EXAMPLES:
   %(prog)s 165721 | jq -r '.releases[].builds[].rpms_by_arch.x86_64[]?'
 
   # Get Brew build IDs and URLs
-  %(prog)s 165721 | jq -r '.releases[].builds[] | "https://[internal-brew-host]/brew/buildinfo?buildID=\(.build_id)"'
+  %(prog)s 165721 | jq -r '.releases[].builds[] | "https://$BREW_HOST/brew/buildinfo?buildID=\(.build_id)"'
 
   # Query from parse-prograde-advisories.py output
   parse-prograde-advisories.py emails.json | jq -r '.advisories[].advisory_id' | while read id; do %(prog)s "$id"; done

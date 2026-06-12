@@ -164,7 +164,7 @@ OUTPUT FORMAT:
           "message_id": "19e41d6f4e0d82bd",
           "subject": "[Prograde] Important: openssh security update RHSA 165721...",
           "date": "2026-05-19 13:04:26",
-          "advisory_link": "https://[internal-errata-host]/advisory/165721",
+          "advisory_link": "https://<ERRATA_HOST>/advisory/165721",
           "advisory_id": "165721",
           "advisory_synopsis": "Important: openssh security update",
           "advisory_security_impact": "Important",

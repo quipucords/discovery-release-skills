@@ -92,10 +92,20 @@ every Claude Code session. This file is never committed to any repository.
 {
   "env": {
     "JIRA_EMAIL": "you@redhat.com",
-    "JIRA_API_TOKEN": "your-api-token"
+    "JIRA_API_TOKEN": "your-api-token",
+    "ERRATA_HOST": "your-errata-host",
+    "BREW_HOST": "your-brew-host"
   }
 }
 ```
+
+> **`ERRATA_HOST`** — required for `query-errata-advisory` (and therefore the full
+> pipeline). Set this to your organization's internal Errata Tool hostname. Red Hat
+> employees: you know what this is; if not, ask a teammate.
+>
+> **`BREW_HOST`** — optional. Only needed if you construct Brew UI links manually
+> from `query-errata-advisory` output (see the `build_id` field). Set to your
+> organization's internal Brew instance hostname.
 
 Alternatively, set them in `.claude/settings.local.json` (project-local, gitignored)
 if you prefer to keep them scoped to this project.
@@ -110,7 +120,9 @@ your `~/.claude/settings.json` or `.claude/settings.local.json`:
 {
   "env": {
     "JIRA_EMAIL": "you@redhat.com",
-    "JIRA_API_TOKEN": "your-api-token"
+    "JIRA_API_TOKEN": "your-api-token",
+    "ERRATA_HOST": "your-errata-host",
+    "BREW_HOST": "your-brew-host"
   },
   "permissions": {
     "allow": [
