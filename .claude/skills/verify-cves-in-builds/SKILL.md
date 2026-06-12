@@ -249,21 +249,58 @@ Do NOT reformat, summarize, or omit any section of it. In particular, any sectio
 marked `*** ACTION REQUIRED ***` contains items the user must manually verify —
 these MUST appear in your response exactly as printed, word for word.
 
+### Step 6.5 — Classify UNKNOWN packages with LLM knowledge
+
+Before generating the HTML report, identify all packages that landed in UNKNOWN
+status and use your knowledge to annotate them with their ecosystem and a brief
+description.
+
+**How to find them:**
+
+- **Compare mode:** read `cve-data/comparison.json`; collect `package_names` from CVEs
+  where `delta == "unknown"`.
+- **Single-set mode:** read the verified-cves JSON; collect `package_names` from CVEs
+  where any `checked_containers` entry has `package_found == false` and
+  `searched_names == []`.
+
+For each **unique** package name, use your LLM knowledge to produce:
+- `ecosystem` — one of: `"npm"`, `"pip"`, `"gem"`, `"go"`, `"maven"`, or `"unknown"`
+- `description` — one sentence: what is this package and why might it appear here?
+
+If you genuinely don't recognise a package, set `ecosystem` to `"unknown"` and
+`description` to `"Package type unknown — investigate manually."`.
+
+Write the result to `cve-data/package-types.json` in this format:
+```json
+{
+  "Axios": {
+    "ecosystem": "npm",
+    "description": "Popular JavaScript HTTP client for Node.js and browsers; likely a Discovery UI frontend dependency"
+  },
+  "fast-uri": {
+    "ecosystem": "npm",
+    "description": "Fast URI parsing library for JavaScript/Node.js; likely a transitive UI dependency"
+  }
+}
+```
+
+If there are no UNKNOWN packages, skip this step and omit `--package-types-file` below.
+
 ### Step 7 — Generate HTML report
 
 **Downstream only:**
 ```bash
-python3 .claude/skills/verify-cves-in-builds/scripts/generate-html-report.py
+python3 .claude/skills/verify-cves-in-builds/scripts/generate-html-report.py [--package-types-file cve-data/package-types.json]
 ```
 
 **Upstream only:**
 ```bash
-python3 .claude/skills/verify-cves-in-builds/scripts/generate-html-report.py --set upstream
+python3 .claude/skills/verify-cves-in-builds/scripts/generate-html-report.py --set upstream [--package-types-file cve-data/package-types.json]
 ```
 
 **Compare mode:**
 ```bash
-python3 .claude/skills/verify-cves-in-builds/scripts/generate-html-report.py --comparison
+python3 .claude/skills/verify-cves-in-builds/scripts/generate-html-report.py --comparison [--package-types-file cve-data/package-types.json]
 ```
 
 After this runs, explicitly tell the user:

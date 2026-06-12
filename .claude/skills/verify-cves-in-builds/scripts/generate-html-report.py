@@ -23,7 +23,20 @@ parser.add_argument("--comparison", action="store_true",
 parser.add_argument("--set", default="downstream", choices=["downstream", "upstream"],
                     dest="set_name",
                     help="Which image set to report on in single-set mode (default: downstream)")
+parser.add_argument("--package-types-file", default=None, metavar="PATH",
+                    help="JSON file mapping package names to {ecosystem, description} dicts")
 args = parser.parse_args()
+
+pkg_types: dict = {}
+if args.package_types_file:
+    try:
+        with open(args.package_types_file) as f:
+            pkg_types = json.load(f)
+        print(f"Loaded package type annotations for {len(pkg_types)} package(s).", file=sys.stderr)
+    except FileNotFoundError:
+        print(f"Warning: --package-types-file '{args.package_types_file}' not found; skipping.", file=sys.stderr)
+    except json.JSONDecodeError as e:
+        print(f"Warning: could not parse --package-types-file: {e}; skipping.", file=sys.stderr)
 
 SEVERITY_ORDER = {"Critical": 4, "Important": 3, "Moderate": 2, "Low": 1, "Unknown": 0}
 
@@ -397,6 +410,27 @@ CSS = """
     font-family: ui-monospace, monospace;
   }
 
+  /* ── Package ecosystem badges ─────────────────────────────────────────── */
+  .pkg-eco {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 9999px;
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    vertical-align: middle;
+    cursor: help;
+    color: #fff;
+    margin-left: 4px;
+  }
+  .pkg-eco-npm    { background: #d97706; }
+  .pkg-eco-pip    { background: #2563eb; }
+  .pkg-eco-gem    { background: #dc2626; }
+  .pkg-eco-go     { background: #0891b2; }
+  .pkg-eco-maven  { background: #7c3aed; }
+  .pkg-eco-unknown { background: #6b7280; }
+
   /* ── Footer ──────────────────────────────────────────────────────────── */
   .footer {
     text-align: center;
@@ -433,6 +467,23 @@ DELTA_META = {
 def delta_badge(delta_key: str) -> str:
     css, label = DELTA_META.get(delta_key, ("delta-unknown", escape(delta_key)))
     return f'<span class="badge {css}">{label}</span>'
+
+
+def annotate_pkg_names(pkg_names: list[str]) -> str:
+    """Render package names with optional ecosystem badge from pkg_types."""
+    parts = []
+    for name in pkg_names:
+        info = pkg_types.get(name) or pkg_types.get(name.lower())
+        if info:
+            eco   = info.get("ecosystem", "unknown")
+            desc  = info.get("description", "")
+            css   = f"pkg-eco-{eco}" if eco in ("npm","pip","gem","go","maven") else "pkg-eco-unknown"
+            badge = (f'<span class="pkg-eco {css}" title="{escape(desc)}">'
+                     f'{escape(eco)}</span>')
+            parts.append(f"{escape(name)}{badge}")
+        else:
+            parts.append(escape(name))
+    return ", ".join(parts)
 
 
 def status_cell(entry: dict | None) -> str:
@@ -534,7 +585,7 @@ def make_comparison_rows(cves: list) -> str:
         ds        = cve.get("downstream", {})
         us        = cve.get("upstream", {})
         pkg_names = cve.get("package_names", [])
-        pkg_cell  = escape(", ".join(pkg_names)) if pkg_names else ""
+        pkg_cell  = annotate_pkg_names(pkg_names) if pkg_names else ""
         parts.append(
             f'<tr class="cve-row" data-delta="{delta}" data-severity="{severity}"'
             f' onclick="toggleDetail(this)">'
@@ -559,11 +610,12 @@ def make_comparison_rows(cves: list) -> str:
 def make_rows(cves, images):
     rows = []
     for cve in cves:
-        cve_id   = cve.get("cve_id", "")
-        cve_link = cve.get("cve_link", f"https://access.redhat.com/security/cve/{cve_id}")
-        severity = cve.get("severity") or "Unknown"
-        checked  = cve.get("checked_containers", {})
-        affected = cve.get("affected_containers", [])
+        cve_id    = cve.get("cve_id", "")
+        cve_link  = cve.get("cve_link", f"https://access.redhat.com/security/cve/{cve_id}")
+        severity  = cve.get("severity") or "Unknown"
+        checked   = cve.get("checked_containers", {})
+        affected  = cve.get("affected_containers", [])
+        pkg_names = cve.get("package_names", [])
 
         for container in images:
             if container not in affected:
@@ -602,6 +654,7 @@ def make_rows(cves, images):
                 "minimum_fixed":    minimum_fixed,
                 "searched":         ", ".join(searched) if searched else "",
                 "checked_image":    entry.get("checked_image", ""),
+                "package_names":    pkg_names,
             })
     return rows
 
@@ -665,9 +718,12 @@ def action_required_html():
             if key in seen:
                 continue
             seen.add(key)
+            pkg_html = (f' <span class="cve-pkg">({annotate_pkg_names(r["package_names"])})</span>'
+                        if r.get("package_names") else "")
             parts.append(
                 f'<li>{sev_badge(r["severity"])} '
                 f'<a href="{escape(r["cve_link"])}" target="_blank">{escape(r["cve_id"])}</a>'
+                f'{pkg_html}'
                 f' — {escape(r["container_short"])}</li>'
             )
         parts.append("</ul>")
@@ -738,7 +794,7 @@ def comparison_action_required_html(cves: list) -> str:
             cve_link  = cve.get("cve_link", f"https://access.redhat.com/security/cve/{cve_id}")
             sev       = cve.get("severity") or "Unknown"
             pkg_names = cve.get("package_names", [])
-            pkg_str   = (f' <span class="cve-pkg">({escape(", ".join(pkg_names))})</span>'
+            pkg_str   = (f' <span class="cve-pkg">({annotate_pkg_names(pkg_names)})</span>'
                          if pkg_names else "")
             parts.append(
                 f'<li>{sev_badge(sev)} '
