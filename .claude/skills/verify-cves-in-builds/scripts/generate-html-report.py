@@ -269,28 +269,20 @@ CSS = """
   .action-required li { margin: 0.3rem 0; }
   .action-required a  { color: var(--action-link); }
   .cve-pkg { opacity: 0.65; font-style: italic; }
-  .col-pkg { font-size: 0.8rem; color: var(--muted); max-width: 14rem; word-break: break-word; }
-  .tip { position: relative; }
-  .tip::after {
-    content: attr(data-tip);
-    position: absolute;
-    bottom: calc(100% + 6px);
-    left: 50%;
-    transform: translateX(-50%);
-    background: var(--text);
-    color: var(--bg);
-    font-size: 0.72rem;
-    font-family: monospace;
-    white-space: pre;
-    padding: 0.35rem 0.55rem;
-    border-radius: 4px;
-    pointer-events: none;
-    opacity: 0;
-    transition: opacity 0.12s;
-    z-index: 20;
-    min-width: max-content;
-  }
-  .tip:hover::after { opacity: 1; }
+  .col-pkg { font-size: 0.8rem; color: var(--text-muted); max-width: 14rem; word-break: break-word; }
+  .cve-row { cursor: pointer; }
+  .cve-row:hover { background: var(--surface-hover); }
+  .expand-icon { font-size: 0.6rem; opacity: 0.4; transition: transform 0.15s; display: inline-block; }
+  .cve-row.expanded .expand-icon { transform: rotate(90deg); opacity: 0.7; }
+  .detail-row td { padding: 0; background: var(--surface-alt); }
+  .detail-content { padding: 0.6rem 1.25rem 0.75rem 2rem; }
+  .detail-table { border-collapse: collapse; font-size: 0.78rem; width: 100%; }
+  .detail-table th { text-align: left; padding: 0.2rem 0.75rem 0.2rem 0; color: var(--text-muted);
+                     font-weight: 600; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  .detail-table td { padding: 0.2rem 0.75rem 0.2rem 0; vertical-align: top; }
+  .det-set  { color: var(--text-muted); white-space: nowrap; font-style: italic; }
+  .det-img  { white-space: nowrap; }
+  .det-installed code, .det-fix code { font-size: 0.78rem; word-break: break-all; }
 
   /* ── Pending-release banner (tier 2 — just cut a release) ────────────── */
   .action-release {
@@ -466,18 +458,7 @@ def status_cell(entry: dict | None) -> str:
     else:
         return status_badge("na", "N/A")
 
-    tip_lines = []
-    if installed:
-        tip_lines.append("Installed:  " + "\n            ".join(installed))
-    elif searched:
-        tip_lines.append("Not found in image")
-    if fix_nvr:
-        tip_lines.append(f"Fix:        {fix_nvr}")
-    if not tip_lines:
-        return badge
-
-    tip = escape("\n".join(tip_lines))
-    return f'<span class="tip" data-tip="{tip}">{badge}</span>'
+    return badge
 
 
 DELTA_SORT_ORDER = {d: i for i, d in enumerate([
@@ -489,26 +470,77 @@ DELTA_SORT_ORDER = {d: i for i, d in enumerate([
 ])}
 
 
+CONTAINER_LABELS = {
+    SERVER_CONTAINER: ("Discovery", "Server"),
+    UI_CONTAINER:     ("Discovery", "UI"),
+}
+
+
+def detail_row_html(ds: dict, us: dict, col_count: int) -> str:
+    """Build the hidden detail <tr> showing per-container version info."""
+    sets = [("Discovery (downstream)", ds), ("quipucords (upstream)", us)]
+    detail_rows = []
+    for set_label, containers in sets:
+        for ckey, (group, short) in CONTAINER_LABELS.items():
+            entry = containers.get(ckey)
+            if not entry:
+                continue
+            installed = entry.get("installed_nvras", [])
+            fix_nvr   = entry.get("minimum_fixed_nvr") or "—"
+            searched  = entry.get("searched_names", [])
+            if installed:
+                installed_html = "<br>".join(f"<code>{escape(n)}</code>" for n in installed)
+            elif searched:
+                installed_html = "<em>not found in image</em>"
+            else:
+                installed_html = "<em>no RPM data</em>"
+            detail_rows.append(
+                f"<tr>"
+                f"<td class='det-set'>{escape(set_label)}</td>"
+                f"<td class='det-img'>{escape(short)} ({escape(group)})</td>"
+                f"<td class='det-installed'>{installed_html}</td>"
+                f"<td class='det-fix'><code>{escape(fix_nvr)}</code></td>"
+                f"</tr>"
+            )
+    inner = (
+        "<table class='detail-table'>"
+        "<thead><tr>"
+        "<th>Set</th><th>Container</th><th>Installed</th><th>Minimum Fix NVR</th>"
+        "</tr></thead>"
+        "<tbody>" + "\n".join(detail_rows) + "</tbody>"
+        "</table>"
+    ) if detail_rows else "<em>No version data available.</em>"
+    return (
+        f'<tr class="detail-row" hidden>'
+        f'<td colspan="{col_count}"><div class="detail-content">{inner}</div></td>'
+        f'</tr>'
+    )
+
+
 def make_comparison_rows(cves: list) -> str:
-    """Build one HTML table row per CVE for the unified comparison table."""
+    """Build one main+detail row pair per CVE for the unified comparison table."""
     sorted_cves = sorted(cves, key=lambda c: (
         DELTA_SORT_ORDER.get(c.get("delta", "unknown"), 99),
         -SEVERITY_ORDER.get(c.get("severity") or "Unknown", 0),
         c.get("cve_id", ""),
     ))
+    COL_COUNT = 8
     parts = []
     for cve in sorted_cves:
-        cve_id   = cve.get("cve_id", "")
-        cve_link = cve.get("cve_link", f"https://access.redhat.com/security/cve/{cve_id}")
-        severity = cve.get("severity") or "Unknown"
-        delta    = cve.get("delta", "unknown")
-        ds       = cve.get("downstream", {})
-        us       = cve.get("upstream", {})
+        cve_id    = cve.get("cve_id", "")
+        cve_link  = cve.get("cve_link", f"https://access.redhat.com/security/cve/{cve_id}")
+        severity  = cve.get("severity") or "Unknown"
+        delta     = cve.get("delta", "unknown")
+        ds        = cve.get("downstream", {})
+        us        = cve.get("upstream", {})
         pkg_names = cve.get("package_names", [])
         pkg_cell  = escape(", ".join(pkg_names)) if pkg_names else ""
         parts.append(
-            f'<tr data-delta="{delta}" data-severity="{severity}">'
-            f'<td><a href="{escape(cve_link)}" target="_blank">{escape(cve_id)}</a></td>'
+            f'<tr class="cve-row" data-delta="{delta}" data-severity="{severity}"'
+            f' onclick="toggleDetail(this)">'
+            f'<td><span class="expand-icon">▶</span>'
+            f' <a href="{escape(cve_link)}" target="_blank"'
+            f' onclick="event.stopPropagation()">{escape(cve_id)}</a></td>'
             f'<td>{sev_badge(severity)}</td>'
             f'<td class="col-pkg">{pkg_cell}</td>'
             f'<td>{status_cell(ds.get(SERVER_CONTAINER))}</td>'
@@ -518,6 +550,7 @@ def make_comparison_rows(cves: list) -> str:
             f'<td>{delta_badge(delta)}</td>'
             f'</tr>'
         )
+        parts.append(detail_row_html(ds, us, COL_COUNT))
     return "\n".join(parts)
 
 
@@ -846,11 +879,16 @@ if mode == "comparison":
   const search   = document.getElementById('f-search').value.toLowerCase();
   let visible = 0;
   for (const tr of tbody.rows) {
+    if (tr.classList.contains('detail-row')) continue;
     const show =
       (!delta    || tr.dataset.delta    === delta)    &&
       (!severity || tr.dataset.severity === severity) &&
       (!search   || tr.cells[0].textContent.toLowerCase().includes(search));
     tr.classList.toggle('hidden', !show);
+    const detail = tr.nextElementSibling;
+    if (detail && detail.classList.contains('detail-row')) {
+      detail.classList.toggle('hidden', !show);
+    }
     if (show) visible++;
   }
   countEl.textContent = visible + ' row' + (visible !== 1 ? 's' : '');"""
@@ -858,13 +896,15 @@ if mode == "comparison":
   const deltaOrder = {fixed_downstream_not_upstream:0, not_fixed_in_either:1,
                       fixed_upstream_not_downstream:2, unknown:3, fixed_in_both:4};
   const sevOrder   = {Critical:4, Important:3, Moderate:2, Low:1, Unknown:0};
-  const rows = Array.from(tbody.rows);
-  rows.sort((a, b) => {
-    const dd = (deltaOrder[a.dataset.delta] ?? 99) - (deltaOrder[b.dataset.delta] ?? 99);
+  const pairs = Array.from(tbody.rows)
+    .filter(r => !r.classList.contains('detail-row'))
+    .map(r => { const d = r.nextElementSibling; return [r, d && d.classList.contains('detail-row') ? d : null]; });
+  pairs.sort((a, b) => {
+    const dd = (deltaOrder[a[0].dataset.delta] ?? 99) - (deltaOrder[b[0].dataset.delta] ?? 99);
     if (dd !== 0) return dd;
-    return (sevOrder[b.dataset.severity] || 0) - (sevOrder[a.dataset.severity] || 0);
+    return (sevOrder[b[0].dataset.severity] || 0) - (sevOrder[a[0].dataset.severity] || 0);
   });
-  rows.forEach(r => tbody.appendChild(r));"""
+  pairs.forEach(([r, detail]) => { tbody.appendChild(r); if (detail) tbody.appendChild(detail); });"""
 
 else:  # single-set mode
     rows = make_rows(cves, images)
@@ -992,6 +1032,14 @@ const tbody = document.getElementById('cve-tbody');
 const countEl = document.getElementById('row-count');
 let sortCol = -1, sortAsc = true;
 
+function toggleDetail(row) {{
+  const detail = row.nextElementSibling;
+  if (!detail || !detail.classList.contains('detail-row')) return;
+  const opening = detail.hasAttribute('hidden');
+  detail.toggleAttribute('hidden', !opening);
+  row.classList.toggle('expanded', opening);
+}}
+
 function applyFilters() {{
   {js_filter}
 }}
@@ -1004,13 +1052,15 @@ function sortTable(col) {{
     th.classList.remove('sorted-asc', 'sorted-desc');
     if (parseInt(th.dataset.col) === col) th.classList.add(sortAsc ? 'sorted-asc' : 'sorted-desc');
   }});
-  const rows = Array.from(tbody.rows);
-  rows.sort((a, b) => {{
-    const av = a.cells[col].textContent.trim();
-    const bv = b.cells[col].textContent.trim();
+  const pairs = Array.from(tbody.rows)
+    .filter(r => !r.classList.contains('detail-row'))
+    .map(r => {{ const d = r.nextElementSibling; return [r, d && d.classList.contains('detail-row') ? d : null]; }});
+  pairs.sort((a, b) => {{
+    const av = a[0].cells[col].textContent.trim();
+    const bv = b[0].cells[col].textContent.trim();
     return sortAsc ? av.localeCompare(bv) : bv.localeCompare(av);
   }});
-  rows.forEach(r => tbody.appendChild(r));
+  pairs.forEach(([r, detail]) => {{ tbody.appendChild(r); if (detail) tbody.appendChild(detail); }});
 }}
 
 (function () {{
