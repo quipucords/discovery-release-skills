@@ -1,3 +1,4 @@
 .claude/settings.local.json
 cve-data/
 !cve-data/package-types.json
+docs/
