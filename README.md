@@ -1,11 +1,12 @@
-# Discovery CVE Skills
+# Discovery Release Skills
 
-Claude Code skills for tracking and verifying CVEs in the Red Hat Discovery
-container images (`discovery-server-rhel9` and `discovery-ui-rhel9`). These
-skills query CVE data from multiple sources (Red Hat Catalog, Prograde advisory
-emails, JIRA, and the Errata API), merge the results into a unified report, and
-optionally verify which CVEs are present or already fixed in a specific container
-build.
+Claude Code skills for managing the Red Hat Discovery release process. Currently,
+the skills focus on CVE tracking and verification: querying CVE data from multiple
+sources (Red Hat Catalog, Prograde advisory emails, JIRA, and the Errata API),
+merging the results into a unified report, and verifying which CVEs are present or
+already fixed in a specific container build. Future skills will cover broader
+release automation — dependency updates, PR management, and upstream/downstream
+release coordination.
 
 Skills are located in `.claude/skills/` and are auto-discovered by Claude Code.
 Once you've completed [Prerequisites](#prerequisites) and [Setup](#setup),
