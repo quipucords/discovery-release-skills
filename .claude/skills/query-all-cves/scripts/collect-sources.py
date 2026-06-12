@@ -8,18 +8,22 @@ Popen are stdout-only, making 2>&1 corruption impossible from this path.
 
 Usage:
   python3 collect-sources.py [--since YYYY-MM-DD]
+                              [--since-last-release]
                               [--server-tag TAG] [--ui-tag TAG]
                               [--skip-gmail]
 
-  --since         Earliest date to fetch (default: 90 days ago). Applied to
-                  Gmail and JIRA queries.
-  --server-tag    Image tag to query for discovery-server in the Red Hat
-                  Catalog (default: latest published tag).
-  --ui-tag        Image tag to query for discovery-ui in the Red Hat Catalog
-                  (default: latest published tag).
-  --skip-gmail    Skip the Gmail/Prograde query entirely. Writes an empty
-                  prograde-emails.json so downstream steps run unchanged.
-                  Use when Prograde emails are unavailable or unwanted.
+  --since               Earliest date to fetch (default: 90 days ago). Applied
+                        to Gmail and JIRA queries.
+  --since-last-release  Derive --since from the catalog: query both containers'
+                        latest image publication dates and use the earlier one.
+                        Mutually exclusive with --since.
+  --server-tag          Image tag to query for discovery-server in the Red Hat
+                        Catalog (default: latest published tag).
+  --ui-tag              Image tag to query for discovery-ui in the Red Hat
+                        Catalog (default: latest published tag).
+  --skip-gmail          Skip the Gmail/Prograde query entirely. Writes an empty
+                        prograde-emails.json so downstream steps run unchanged.
+                        Use when Prograde emails are unavailable or unwanted.
 
   When --server-tag or --ui-tag are provided, the catalog is queried once per
   container and the results are merged into cve-data/catalog.json.
@@ -34,12 +38,30 @@ import time
 
 parser = argparse.ArgumentParser(add_help=False)
 parser.add_argument("--since", default=None)
+parser.add_argument("--since-last-release", action="store_true", default=False)
 parser.add_argument("--server-tag", default=None)
 parser.add_argument("--ui-tag", default=None)
 parser.add_argument("--skip-gmail", action="store_true", default=False)
 args = parser.parse_args()
 
-since = args.since or (datetime.date.today() - datetime.timedelta(days=90)).isoformat()
+if args.since and args.since_last_release:
+    print("Error: --since and --since-last-release are mutually exclusive.", file=sys.stderr)
+    sys.exit(1)
+
+if args.since_last_release:
+    release_date_script = ".claude/skills/query-redhat-catalog/scripts/get-catalog-release-date.py"
+    print("Fetching last downstream release date from Red Hat Catalog...", flush=True)
+    result = subprocess.run(["uv", "run", release_date_script], capture_output=True, text=True)
+    if result.returncode != 0:
+        print(f"Error: failed to get release date from catalog.\n{result.stderr}", file=sys.stderr)
+        sys.exit(1)
+    # stderr was already logged to the terminal via capture; re-emit it
+    if result.stderr:
+        print(result.stderr, end="", flush=True)
+    since = result.stdout.strip()
+    print(f"Using --since {since} (last downstream release date).", flush=True)
+else:
+    since = args.since or (datetime.date.today() - datetime.timedelta(days=90)).isoformat()
 
 os.makedirs("cve-data", exist_ok=True)
 

@@ -47,10 +47,12 @@ answers to build the arguments for `collect-sources.py` in Phase 1.
 Ask the user whether to include Prograde advisory emails from Gmail. Not all
 users receive these emails or have Gmail configured. If they do, also ask how
 far back to query. Pass `--skip-gmail` to `collect-sources.py` if skipping;
+pass `--since-last-release` to auto-detect the last downstream release date;
 pass `--since YYYY-MM-DD` if a custom date is given (default is 90 days ago).
 
 Options to present:
 - **Last 90 days (default)** — query Gmail for Prograde emails from the last 90 days
+- **Since last downstream release** — query catalog for when the latest discovery images were published, use that date; pass `--since-last-release`
 - **Custom date** — query Gmail from a specific date (ask for the date)
 - **Skip Prograde emails** — omit Gmail entirely; use `--skip-gmail` flag
 
@@ -96,7 +98,7 @@ Pass the options gathered in Step 1. Omit any flag whose value is the default:
 
 ```bash
 python3 .claude/skills/query-all-cves/scripts/collect-sources.py \
-  [--since YYYY-MM-DD] \
+  [--since YYYY-MM-DD | --since-last-release] \
   [--server-tag TAG] \
   [--ui-tag TAG]
 ```
