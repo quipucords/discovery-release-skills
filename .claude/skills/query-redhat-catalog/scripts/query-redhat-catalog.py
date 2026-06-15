@@ -17,6 +17,7 @@ All logs and errors go to stderr; only JSON results go to stdout.
 
 import argparse
 import json
+import os
 import sys
 
 import httpx
@@ -25,15 +26,23 @@ import httpx
 CATALOG_BASE = "https://catalog.redhat.com"
 GRAPHQL_URL = f"{CATALOG_BASE}/api/containers/graphql/"
 
-# Repository IDs from the catalog page URLs (stable).
+# Container short names (used as dict keys and --container arg values).
+_SERVER_NAME = os.environ.get("CATALOG_SERVER_NAME", "discovery-server")
+_UI_NAME     = os.environ.get("CATALOG_UI_NAME",     "discovery-ui")
+
+# Downstream image base URLs (strip the registry host to get the image-name path).
+_DOWNSTREAM_SERVER_IMAGE = os.environ.get("DOWNSTREAM_SERVER_IMAGE", "registry.redhat.io/discovery/discovery-server-rhel9")
+_DOWNSTREAM_UI_IMAGE     = os.environ.get("DOWNSTREAM_UI_IMAGE",     "registry.redhat.io/discovery/discovery-ui-rhel9")
+
+# Repository IDs from the catalog page URLs (stable, set via CATALOG_SERVER_ID / CATALOG_UI_ID).
 CONTAINER_REPO_IDS = {
-    "discovery-server": "64cabaaca7460ea2e782ac6e",
-    "discovery-ui": "66fd8f5c7f6fd21630e914d9",
+    _SERVER_NAME: os.environ.get("CATALOG_SERVER_ID", "64cabaaca7460ea2e782ac6e"),
+    _UI_NAME:     os.environ.get("CATALOG_UI_ID",     "66fd8f5c7f6fd21630e914d9"),
 }
 
 CONTAINER_IMAGE_NAMES = {
-    "discovery-server": "discovery/discovery-server-rhel9",
-    "discovery-ui": "discovery/discovery-ui-rhel9",
+    _SERVER_NAME: _DOWNSTREAM_SERVER_IMAGE.split("/", 1)[1],
+    _UI_NAME:     _DOWNSTREAM_UI_IMAGE.split("/", 1)[1],
 }
 
 # GraphQL query for vulnerabilities - mirrors the catalog page's FIND_IMAGE_VULNERABILITIES
@@ -311,9 +320,9 @@ NOTE:
 
     parser.add_argument(
         "--container",
-        choices=["discovery-server", "discovery-ui", "all"],
+        choices=[*CONTAINER_REPO_IDS.keys(), "all"],
         default="all",
-        help='Container to query: "discovery-server", "discovery-ui", or "all" (default: all)',
+        help='Container to query: {}, or "all" (default: all)'.format(", ".join(f'"{k}"' for k in CONTAINER_REPO_IDS)),
     )
     parser.add_argument(
         "--tag",

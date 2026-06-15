@@ -17,6 +17,7 @@ All progress messages go to stderr. This script produces no stdout output
 """
 import argparse
 import json
+import os
 import re
 import sys
 import time
@@ -31,8 +32,8 @@ _args = _parser.parse_args()
 set_name = _args.set_name
 
 # These constants must match the values in pull-and-query-rpms.py.
-SERVER_CONTAINER = "discovery/discovery-server-rhel9"
-UI_CONTAINER     = "discovery/discovery-ui-rhel9"
+SERVER_CONTAINER = os.environ.get("DOWNSTREAM_SERVER_IMAGE", "registry.redhat.io/discovery/discovery-server-rhel9").split("/", 1)[1]
+UI_CONTAINER     = os.environ.get("DOWNSTREAM_UI_IMAGE",     "registry.redhat.io/discovery/discovery-ui-rhel9").split("/", 1)[1]
 
 RPM_FILES = {
     SERVER_CONTAINER: f"cve-data/rpms-server-{set_name}.txt",

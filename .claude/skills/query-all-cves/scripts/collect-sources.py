@@ -41,6 +41,9 @@ import subprocess
 import sys
 import time
 
+_CATALOG_SERVER_NAME = os.environ.get("CATALOG_SERVER_NAME", "discovery-server")
+_CATALOG_UI_NAME     = os.environ.get("CATALOG_UI_NAME",     "discovery-ui")
+
 parser = argparse.ArgumentParser(add_help=False)
 parser.add_argument("--since", default=None)
 parser.add_argument("--since-last-release", action="store_true", default=False)
@@ -90,8 +93,8 @@ def collect_catalog():
 
     # Per-container queries
     combined = {"total": 0, "cves": []}
-    for container, tag in [("discovery-server", args.server_tag),
-                            ("discovery-ui",     args.ui_tag)]:
+    for container, tag in [(_CATALOG_SERVER_NAME, args.server_tag),
+                            (_CATALOG_UI_NAME,     args.ui_tag)]:
         cmd = ["uv", "run", catalog_script, "--container", container]
         if tag:
             cmd += ["--tag", tag]

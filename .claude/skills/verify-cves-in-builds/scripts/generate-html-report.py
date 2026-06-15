@@ -13,6 +13,7 @@ All progress goes to stderr. Exits non-zero on failure.
 """
 import argparse
 import json
+import os
 import sys
 from datetime import datetime, timezone
 from html import escape
@@ -40,9 +41,13 @@ if args.package_types_file:
 
 SEVERITY_ORDER = {"Critical": 4, "Important": 3, "Moderate": 2, "Low": 1, "Unknown": 0}
 
-# Container name constants (must match check-cves-in-rpms.py)
-SERVER_CONTAINER = "discovery/discovery-server-rhel9"
-UI_CONTAINER     = "discovery/discovery-ui-rhel9"
+# Product display names — downstream product and upstream project.
+_PRODUCT_NAME          = os.environ.get("PRODUCT_NAME",          "Discovery")
+_UPSTREAM_PRODUCT_NAME = os.environ.get("UPSTREAM_PRODUCT_NAME", "quipucords")
+
+# Container name constants (must match check-cves-in-rpms.py).
+SERVER_CONTAINER = os.environ.get("DOWNSTREAM_SERVER_IMAGE", "registry.redhat.io/discovery/discovery-server-rhel9").split("/", 1)[1]
+UI_CONTAINER     = os.environ.get("DOWNSTREAM_UI_IMAGE",     "registry.redhat.io/discovery/discovery-ui-rhel9").split("/", 1)[1]
 
 if args.comparison:
     try:
@@ -522,14 +527,14 @@ DELTA_SORT_ORDER = {d: i for i, d in enumerate([
 
 
 CONTAINER_LABELS = {
-    SERVER_CONTAINER: ("Discovery", "Server"),
-    UI_CONTAINER:     ("Discovery", "UI"),
+    SERVER_CONTAINER: (_PRODUCT_NAME, "Server"),
+    UI_CONTAINER:     (_PRODUCT_NAME, "UI"),
 }
 
 
 def detail_row_html(ds: dict, us: dict, col_count: int) -> str:
     """Build the hidden detail <tr> showing per-container version info."""
-    sets = [("Discovery (downstream)", ds), ("quipucords (upstream)", us)]
+    sets = [(f"{_PRODUCT_NAME} (downstream)", ds), (f"{_UPSTREAM_PRODUCT_NAME} (upstream)", us)]
     detail_rows = []
     for set_label, containers in sets:
         for ckey, (group, short) in CONTAINER_LABELS.items():
@@ -814,9 +819,9 @@ def comparison_action_required_html(cves: list) -> str:
     if group:
         tier1_parts.append("<h3>🚨 Upstream regression — fixed downstream but NOT in upstream</h3>")
         tier1_parts.append(
-            "<p>The downstream Discovery release contains these fixes, but they have been lost "
-            "from the upstream quipucords codebase. This is unexpected! Find and restore the "
-            "fix in the upstream quipucords project immediately.</p>"
+            f"<p>The downstream {escape(_PRODUCT_NAME)} release contains these fixes, but they have been lost "
+            f"from the upstream {escape(_UPSTREAM_PRODUCT_NAME)} codebase. This is unexpected! Find and restore the "
+            f"fix in the upstream {escape(_UPSTREAM_PRODUCT_NAME)} project immediately.</p>"
         )
         tier1_parts.append(cve_list_html(group))
 
@@ -824,9 +829,9 @@ def comparison_action_required_html(cves: list) -> str:
     if group:
         tier1_parts.append("<h3>‼️ Not fixed anywhere — develop the fix upstream</h3>")
         tier1_parts.append(
-            "<p>No fix exists yet in either the upstream quipucords build or the downstream "
-            "Discovery release. Develop and merge the fix into the upstream quipucords project "
-            "first; then prepare to include it in a downstream release.</p>"
+            f"<p>No fix exists yet in either the upstream {escape(_UPSTREAM_PRODUCT_NAME)} build or the downstream "
+            f"{escape(_PRODUCT_NAME)} release. Develop and merge the fix into the upstream {escape(_UPSTREAM_PRODUCT_NAME)} project "
+            f"first; then prepare to include it in a downstream release.</p>"
         )
         tier1_parts.append(cve_list_html(group))
 
@@ -854,8 +859,8 @@ def comparison_action_required_html(cves: list) -> str:
             '<div class="action-release">'
             "<h2>📦 Release Needed — No code changes required</h2>"
             "<h3>Fixed upstream, pending downstream release</h3>"
-            "<p>These fixes have been merged to the upstream quipucords codebase. "
-            "No further upstream changes are needed. Cut a new downstream Discovery release "
+            f"<p>These fixes have been merged to the upstream {escape(_UPSTREAM_PRODUCT_NAME)} codebase. "
+            f"No further upstream changes are needed. Cut a new downstream {escape(_PRODUCT_NAME)} release "
             "to ship them.</p>"
             + cve_list_html(group)
             + "</div>\n"
@@ -912,13 +917,13 @@ if mode == "comparison":
     </select>
     <input id="f-search" type="search" placeholder="Search CVE ID…" oninput="applyFilters()">
     <span class="row-count" id="row-count"></span>"""
-    thead_html    = """
+    thead_html    = f"""
         <tr>
           <th data-col="0" rowspan="2" onclick="sortTable(0)">CVE ID</th>
           <th data-col="1" rowspan="2" onclick="sortTable(1)">Severity</th>
           <th data-col="2" rowspan="2" onclick="sortTable(2)">Package(s)</th>
-          <th colspan="2" class="col-group col-group-downstream">Discovery</th>
-          <th colspan="2" class="col-group col-group-upstream">quipucords</th>
+          <th colspan="2" class="col-group col-group-downstream">{escape(_PRODUCT_NAME)}</th>
+          <th colspan="2" class="col-group col-group-upstream">{escape(_UPSTREAM_PRODUCT_NAME)}</th>
           <th data-col="7" rowspan="2" onclick="sortTable(7)">Delta</th>
         </tr>
         <tr>

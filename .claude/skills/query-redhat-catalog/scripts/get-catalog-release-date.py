@@ -16,6 +16,7 @@ All logs go to stderr.
 """
 
 import argparse
+import os
 import sys
 
 import httpx
@@ -23,8 +24,8 @@ import httpx
 CATALOG_BASE = "https://catalog.redhat.com"
 
 CONTAINER_REPO_IDS = {
-    "discovery-server": "64cabaaca7460ea2e782ac6e",
-    "discovery-ui": "66fd8f5c7f6fd21630e914d9",
+    os.environ.get("CATALOG_SERVER_NAME", "discovery-server"): os.environ.get("CATALOG_SERVER_ID", "64cabaaca7460ea2e782ac6e"),
+    os.environ.get("CATALOG_UI_NAME",     "discovery-ui"):     os.environ.get("CATALOG_UI_ID",     "66fd8f5c7f6fd21630e914d9"),
 }
 
 

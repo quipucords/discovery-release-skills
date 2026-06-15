@@ -25,30 +25,36 @@ import sys
 import time
 
 # These constants must match the values in check-cves-in-rpms.py.
-SERVER_CONTAINER = "discovery/discovery-server-rhel9"
-UI_CONTAINER     = "discovery/discovery-ui-rhel9"
+# Container keys are derived from the downstream image URLs (path after the registry host).
+_DOWNSTREAM_SERVER_IMAGE = os.environ.get("DOWNSTREAM_SERVER_IMAGE", "registry.redhat.io/discovery/discovery-server-rhel9")
+_DOWNSTREAM_UI_IMAGE     = os.environ.get("DOWNSTREAM_UI_IMAGE",     "registry.redhat.io/discovery/discovery-ui-rhel9")
+_UPSTREAM_SERVER_IMAGE   = os.environ.get("UPSTREAM_SERVER_IMAGE",   "quay.io/quipucords/quipucords")
+_UPSTREAM_UI_IMAGE       = os.environ.get("UPSTREAM_UI_IMAGE",       "quay.io/quipucords/quipucords-ui")
+
+SERVER_CONTAINER = _DOWNSTREAM_SERVER_IMAGE.split("/", 1)[1]
+UI_CONTAINER     = _DOWNSTREAM_UI_IMAGE.split("/", 1)[1]
 
 DOWNSTREAM_BASE = {
-    SERVER_CONTAINER: "registry.redhat.io/discovery/discovery-server-rhel9",
-    UI_CONTAINER:     "registry.redhat.io/discovery/discovery-ui-rhel9",
+    SERVER_CONTAINER: _DOWNSTREAM_SERVER_IMAGE,
+    UI_CONTAINER:     _DOWNSTREAM_UI_IMAGE,
 }
 UPSTREAM_BASE = {
-    SERVER_CONTAINER: "quay.io/quipucords/quipucords",
-    UI_CONTAINER:     "quay.io/quipucords/quipucords-ui",
+    SERVER_CONTAINER: _UPSTREAM_SERVER_IMAGE,
+    UI_CONTAINER:     _UPSTREAM_UI_IMAGE,
 }
 
 parser = argparse.ArgumentParser(
-    description="Pull Discovery container images and query installed RPMs.",
+    description="Pull container images and query installed RPMs.",
     formatter_class=argparse.RawDescriptionHelpFormatter,
 )
 parser.add_argument("--downstream-server-tag", default=None,
-                    help="Tag for downstream discovery-server (registry.redhat.io)")
+                    help=f"Tag for downstream server image ({_DOWNSTREAM_SERVER_IMAGE}:<tag>)")
 parser.add_argument("--downstream-ui-tag", default=None,
-                    help="Tag for downstream discovery-ui (registry.redhat.io)")
+                    help=f"Tag for downstream UI image ({_DOWNSTREAM_UI_IMAGE}:<tag>)")
 parser.add_argument("--upstream-server-tag", default=None,
-                    help="Tag for upstream discovery-server (quay.io/quipucords)")
+                    help=f"Tag for upstream server image ({_UPSTREAM_SERVER_IMAGE}:<tag>)")
 parser.add_argument("--upstream-ui-tag", default=None,
-                    help="Tag for upstream discovery-ui (quay.io/quipucords)")
+                    help=f"Tag for upstream UI image ({_UPSTREAM_UI_IMAGE}:<tag>)")
 args = parser.parse_args()
 
 # Each pair must be fully specified or fully omitted.

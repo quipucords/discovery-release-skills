@@ -181,6 +181,10 @@ python3 .claude/skills/check-location.py
 > **Always use relative paths** when invoking scripts in this skill — never
 > absolute paths. The allowlist that permits these commands matches the
 > relative form `python3 .claude/skills/...` only.
+>
+> **IMPORTANT:** Run all script commands exactly as shown — no `2>&1`, no
+> `; echo "Exit: $?"`, no shell decorators of any kind. The Bash tool reports
+> exit codes automatically; decorating the command breaks the allowlist pattern.
 
 ### Step 3 — Pull images and query RPMs
 
@@ -252,7 +256,7 @@ these MUST appear in your response exactly as printed, word for word.
 ### Step 6.5 — Classify UNKNOWN packages with LLM knowledge
 
 Run the classification helper to find UNKNOWN packages and check which are
-already annotated in `cve-data/package-types.json`:
+already annotated in `cve-data/package-types.json`.
 
 **Compare mode:**
 ```bash

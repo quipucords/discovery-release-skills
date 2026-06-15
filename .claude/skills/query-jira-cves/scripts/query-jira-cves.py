@@ -21,6 +21,12 @@ import sys
 
 import httpx
 
+_JIRA_PROJECT = os.environ.get("JIRA_PROJECT", "DISCOVERY")
+_JIRA_NVR_PATTERN = os.environ.get(
+    "JIRA_NVR_PATTERN",
+    r'(?:discovery/discovery-\w+-rhel\d+|redhat-user-workloads/discovery-\w+):\s+(.+)',
+)
+
 
 def log(message: str) -> None:
     """Log to stderr."""
@@ -53,7 +59,7 @@ def search_jira_issues(
     jira_host: str,
     email: str,
     api_token: str,
-    project: str = "DISCOVERY",
+    project: str = _JIRA_PROJECT,
     label: str | None = None,
     summary_contains: str | None = None,
     created_since: str | None = None,
@@ -68,7 +74,7 @@ def search_jira_issues(
         jira_host: JIRA instance hostname
         email: JIRA user email
         api_token: JIRA API token
-        project: Project key to search (default: DISCOVERY)
+        project: Project key to search (default: $JIRA_PROJECT or "DISCOVERY")
         label: Label to filter by (optional)
         summary_contains: Text to search in issue summary/title (optional)
         created_since: Only return issues created on or after this date (YYYY-MM-DD)
@@ -183,10 +189,7 @@ def search_jira_issues(
                 # This is an upstream package name (e.g., "Axios", "urllib3", "Django"),
                 # not an RPM name. Issues without a colon-separated prefix return None.
                 package_name = None
-                summary_tail_match = re.search(
-                    r'(?:discovery/discovery-\w+-rhel\d+|redhat-user-workloads/discovery-\w+):\s+(.+)',
-                    summary
-                )
+                summary_tail_match = re.search(_JIRA_NVR_PATTERN, summary)
                 if summary_tail_match:
                     tail = summary_tail_match.group(1)
                     colon_match = re.match(r'^([^:]{2,40}):\s+\S', tail)
@@ -429,9 +432,9 @@ NOTE:
 
     parser.add_argument(
         '--project',
-        default='DISCOVERY',
+        default=_JIRA_PROJECT,
         metavar='KEY',
-        help='JIRA project key to search (default: DISCOVERY)',
+        help='JIRA project key to search (default: $JIRA_PROJECT or "DISCOVERY")',
     )
     parser.add_argument(
         '--label',

@@ -124,6 +124,31 @@ session. This file is never committed to any repository.
 > If unset, the `--label` flag is omitted and query-gmail returns all matching emails
 > regardless of label.
 
+#### Product configuration (optional — have Discovery defaults)
+
+If you are **not** the Discovery team and want to adapt this pipeline to your own
+product, set these additional variables. All have working Discovery defaults so the
+pipeline runs unchanged if you skip them.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `JIRA_PROJECT` | `DISCOVERY` | JIRA project key to search for CVE tracking issues |
+| `JIRA_NVR_PATTERN` | Discovery regex | Full regex (with one capture group) matching NVR strings in JIRA issue summaries |
+| `CATALOG_SERVER_NAME` | `discovery-server` | Short name for the server container in Red Hat Catalog queries |
+| `CATALOG_UI_NAME` | `discovery-ui` | Short name for the UI container in Red Hat Catalog queries |
+| `CATALOG_SERVER_ID` | Discovery hex ID | Red Hat Catalog repository ID for the server container (from the catalog page URL) |
+| `CATALOG_UI_ID` | Discovery hex ID | Red Hat Catalog repository ID for the UI container |
+| `DOWNSTREAM_SERVER_IMAGE` | `registry.redhat.io/discovery/discovery-server-rhel9` | Full base URL for the downstream server image |
+| `DOWNSTREAM_UI_IMAGE` | `registry.redhat.io/discovery/discovery-ui-rhel9` | Full base URL for the downstream UI image |
+| `UPSTREAM_SERVER_IMAGE` | `quay.io/quipucords/quipucords` | Full base URL for the upstream server image |
+| `UPSTREAM_UI_IMAGE` | `quay.io/quipucords/quipucords-ui` | Full base URL for the upstream UI image |
+| `PRODUCT_NAME` | `Discovery` | Human-readable downstream product name (used in reports) |
+| `UPSTREAM_PRODUCT_NAME` | `quipucords` | Human-readable upstream project name (used in reports) |
+
+> **Note on the two-container model:** The pipeline is built around exactly two
+> containers (server + UI). Teams with a different number of containers would need
+> to adapt the skill structure — this is a known limitation for v1.
+
 Alternatively, set them in `.claude/settings.local.json` (project-local, gitignored)
 if you prefer to keep them scoped to this project.
 
