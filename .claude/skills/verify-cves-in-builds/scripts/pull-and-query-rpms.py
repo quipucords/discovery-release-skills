@@ -206,11 +206,30 @@ for sn, c in all_tasks:
 log(f"RPM queries complete in {time.time() - t1:.1f}s.")
 
 
+# ── Collect image digests ─────────────────────────────────────────────────────
+log("\nCollecting image digests...")
+digests: dict[str, dict[str, str | None]] = {}
+for sn, containers in sets.items():
+    digests[sn] = {}
+    for c, image_url in containers.items():
+        result = subprocess.run(
+            ["podman", "image", "inspect", "--format", "{{.Digest}}", image_url],
+            capture_output=True, text=True,
+        )
+        digest = result.stdout.strip() if result.returncode == 0 else None
+        digests[sn][c] = digest if digest and digest.startswith("sha256:") else None
+        log(f"  {image_url}: {digests[sn][c] or '(digest unavailable)'}")
+
+
 # ── Write checked-images.json for each set ───────────────────────────────────
 for sn, containers in sets.items():
     path = f"cve-data/checked-images-{sn}.json"
+    checked = {
+        c: {"image": image_url, "digest": digests[sn].get(c)}
+        for c, image_url in containers.items()
+    }
     with open(path, "w") as f:
-        json.dump(containers, f, indent=2)
+        json.dump(checked, f, indent=2)
     log(f"Wrote {path}")
 
 log(f"\nDone in {time.time() - t0:.1f}s total.")

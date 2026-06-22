@@ -400,6 +400,14 @@ def load_rpm_list(path: str) -> tuple[dict[str, list[dict]], list[str]]:
     return index, skipped
 
 
+def image_url(checked_images: dict, container: str) -> str | None:
+    """Extract image URL from checked_images entry (supports both old str and new dict format)."""
+    entry = checked_images.get(container)
+    if isinstance(entry, dict):
+        return entry.get("image")
+    return entry
+
+
 log("Loading input files...")
 
 unified = load_json("cve-data/unified-cves.json", "unified-cves.json")
@@ -426,7 +434,7 @@ def check_cve_in_container(cve: dict, container: str) -> dict:
     Return a checked_containers entry for one CVE + container combination.
     """
     result = {
-        "checked_image": checked_images.get(container),
+        "checked_image": image_url(checked_images, container),
         "package_found": False,
         "searched_names": [],
         "installed_nvras": [],
@@ -573,6 +581,10 @@ log(f"Checked {len(enriched_cves)} CVEs in {time.time() - t0:.1f}s.")
 output = {
     "generated_at": unified.get("generated_at"),
     "verified_at": datetime.now(timezone.utc).isoformat(),
+    "build_info": {
+        "containers": dict(checked_images),
+        "source": None,
+    },
     "verification": {
         "images": dict(checked_images),
         "skipped_nvras": skipped_nvras,
@@ -580,7 +592,7 @@ output = {
     "summary": unified.get("summary", {}),
     "verification_summary": {
         container: {
-            "checked_image": checked_images.get(container),
+            "checked_image": image_url(checked_images, container),
             **s,
         }
         for container, s in stats.items()
