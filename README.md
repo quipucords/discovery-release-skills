@@ -50,6 +50,22 @@ See the [Gmail API Quickstart](https://developers.google.com/gmail/api/quickstar
 for how to obtain credentials. If you don't receive Prograde advisory emails,
 see [Team collaboration](#team-collaboration-sharing-prograde-data) below.
 
+### GitHub CLI (`gh`) — optional but recommended
+
+Used by `verify-cves-in-builds` and `verify-cves-in-source` to query the GitHub
+Advisory Database for GHSA IDs and advisory metadata. Without it those lookups are
+silently skipped and the affected CVEs will have less enrichment data in the report.
+
+```bash
+# macOS
+brew install gh
+gh auth login
+
+# Fedora / RHEL
+sudo dnf install -y gh
+gh auth login
+```
+
 ### podman
 
 Used to pull and inspect container images:
@@ -148,6 +164,25 @@ pipeline runs unchanged if you skip them.
 > **Note on the two-container model:** The pipeline is built around exactly two
 > containers (server + UI). Teams with a different number of containers would need
 > to adapt the skill structure — this is a known limitation for v1.
+
+#### Source repo configuration (optional — used by `/verify-cves-in-source`)
+
+These variables tell `verify-cves-in-source` where to find the quipucords and
+quipucords-ui source repositories. If the repos are not present at the configured
+paths, the skill clones them automatically using the URL variables.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `QUIPUCORDS_SERVER_REPO_PATH` | `../quipucords` | Local path to the quipucords server repo |
+| `QUIPUCORDS_UI_REPO_PATH` | `../quipucords-ui` | Local path to the quipucords-ui repo |
+| `QUIPUCORDS_SERVER_REPO_URL` | `git@github.com:quipucords/quipucords.git` | Clone URL used when the path does not exist |
+| `QUIPUCORDS_UI_REPO_URL` | `git@github.com:quipucords/quipucords-ui.git` | Clone URL used when the path does not exist |
+
+> **git and SSH key required for source check:** `git` must be in PATH, and an SSH
+> key authorised for GitHub must be available if the repos need to be cloned. If the
+> repos are already checked out at the default paths (`../quipucords` and
+> `../quipucords-ui`), no SSH key is needed — the skill will fetch and check out the
+> requested commitish in place.
 
 Alternatively, set them in `.claude/settings.local.json` (project-local, gitignored)
 if you prefer to keep them scoped to this project.
@@ -260,9 +295,10 @@ so the resulting report is just as complete as if you had Gmail access.
 
 | Skill | What it does |
 |-------|-------------|
-| `/run-cve-check-pipeline` | **One-stop shop.** Collects CVE data from all sources, then verifies builds. Supports the same three modes as `/verify-cves-in-builds` below. |
+| `/run-cve-check-pipeline` | **One-stop shop.** Collects CVE data from all sources, then verifies builds. In compare mode, also offers an optional source lockfile check for non-RPM packages. Supports the same three modes as `/verify-cves-in-builds` below. |
 | `/query-all-cves` | Data collection only. Queries all sources and produces `cve-data/unified-cves.json`. Use this if you don't need build verification. |
 | `/verify-cves-in-builds` | Build verification only. Pulls container images and checks which CVEs from an existing `unified-cves.json` are present or fixed. Three modes: **downstream only** (check the released Discovery images), **upstream only** (check quipucords before cutting a release), or **compare** (delta report across both). Requires `unified-cves.json` from a prior `query-all-cves` run. |
+| `/verify-cves-in-source` | Source code check for non-RPM packages. After `verify-cves-in-builds` (compare mode), reads `lockfiles/requirements.txt` and `lockfiles/requirements-build.txt` (pip) plus `package-lock.json` (npm) from the quipucords and quipucords-ui repos to resolve CVEs that RPM scanning left as **unknown**. Promotes resolved unknowns to `fixed_upstream_not_downstream` in the comparison report. |
 
 ### Data source skills (called automatically by the pipeline)
 
@@ -282,16 +318,21 @@ handle orchestration.
 
 ## Output files
 
-All output is written to `cve-data/` (gitignored):
+Most output is written to `cve-data/` (gitignored), with one exception:
+`cve-data/package-types.json` is **not** gitignored — it is meant to be committed
+so ecosystem annotations persist across runs and team members.
 
 | File | Mode | Contents |
 |------|------|----------|
 | `cve-data/unified-cves.json` | all | All reported CVEs with severity, advisory links, and fix data |
 | `cve-data/verified-cves-downstream.json` | downstream / compare | Per-container verification for downstream images |
 | `cve-data/verified-cves-upstream.json` | upstream / compare | Per-container verification for upstream images |
+| `cve-data/verified-cves-source.json` | compare + source check | Lockfile check results for non-RPM packages (npm/pip) |
 | `cve-data/comparison.json` | compare | Delta between downstream and upstream per CVE |
 | `cve-data/cve-report.html` | all | Visual HTML report |
+| `cve-data/package-types.json` | all | Ecosystem annotations (`npm`, `pip`, etc.) for packages the pipeline couldn't auto-classify. Committed to the repo. |
 
 The HTML report is filterable and sortable, supports light and dark mode, and
 prominently calls out CVEs by priority: upstream regressions first, then unfixed
-CVEs, then upstream fixes that are pending a downstream release.
+CVEs, then upstream fixes that are pending a downstream release. CVEs resolved via
+source lockfile check are annotated with **[src]** in the upstream status column.

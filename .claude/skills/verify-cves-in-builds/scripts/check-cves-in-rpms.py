@@ -19,8 +19,10 @@ import argparse
 import json
 import os
 import re
+import subprocess
 import sys
 import time
+import urllib.request
 from datetime import datetime, timezone
 
 _parser = argparse.ArgumentParser(
@@ -174,6 +176,187 @@ def package_name_from_entry(entry: dict) -> str | None:
     return None
 
 
+# Matches 'python-X' source package names (SRPM convention in RHEL).
+_PYTHON_SRPM_RE = re.compile(r'^python-(.+)$')
+
+
+def _expand_python_names(name: str, container_index: dict[str, list]) -> set[str]:
+    """Expand a 'python-X' source package name to include binary RPM variants.
+
+    RHEL publishes Python libraries under source package name 'python-X' but
+    the installed binary packages are named 'python3-X', 'python3.12-X',
+    'python3-X-wheel', 'python3.12-X-wheel', etc. The exact minor version
+    depends on the RHEL version and may vary across releases.
+
+    Scans the actual container RPM index to find all matching variants so we
+    don't need a static lookup table. The version comparison in evr_gte()
+    already strips the package name prefix, so binary and source NVRs compare
+    correctly as long as they share the same upstream version number.
+    """
+    m = _PYTHON_SRPM_RE.match(name)
+    if not m:
+        return {name}
+    suffix = re.escape(m.group(1))
+    # Anchored at $ so 'python-pip' matches 'python3.12-pip' but NOT
+    # 'python3.12-pip-wheel': wheel packages are a separate RPM and are only
+    # relevant when the CVE itself targets 'python-pip-wheel' specifically.
+    pattern = re.compile(rf'^python\d+(?:\.\d+)?-{suffix}$')
+    expanded = {name}
+    for key in container_index:
+        if pattern.match(key):
+            expanded.add(key)
+    return expanded
+
+
+# ── Advisory fallback for missing fix versions ────────────────────────────────
+# Used when fixed_packages is empty (no errata published yet). Queries GitHub
+# Advisory → OSV → NVD in sequence to find the minimum fixed version so the
+# installed RPM version can be compared against it.
+
+_advisory_fix_cache: dict[str, str | None] = {}  # cve_id → fix version or None
+
+
+def _gh_ghsa_id(cve_id: str) -> str | None:
+    """Return the GHSA ID for a CVE via `gh api`, or None."""
+    try:
+        result = subprocess.run(
+            ["gh", "api", f"/advisories?cve_id={cve_id}"],
+            capture_output=True, text=True, timeout=10,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            data = json.loads(result.stdout)
+            if data:
+                return data[0].get("ghsa_id")
+    except Exception:
+        pass
+    return None
+
+
+_OSV_ALIAS_RE = re.compile(r'aliases were: ([A-Z]+-\d+-\d+)')
+
+
+def _osv_fix_version(initial_ids: list, installed_version: str) -> str | None:
+    """Return the fix version from OSV, trying multiple IDs and following alias hints.
+
+    OSV may 404 on a GHSA ID but return an error body like:
+      {"message":"Bug not found, but the following aliases were: PYSEC-2026-196"}
+    We parse that alias and retry automatically. Accepts a list of IDs to try
+    in order (e.g. [cve_id, ghsa_id]) so we cast the widest net first.
+    """
+    queue = list(initial_ids)
+    seen: set[str] = set()
+
+    while queue:
+        osv_id = queue.pop(0)
+        if osv_id in seen:
+            continue
+        seen.add(osv_id)
+        try:
+            url = f"https://api.osv.dev/v1/vulns/{osv_id}"
+            req = urllib.request.Request(url, headers={"User-Agent": "discovery-cve-check/1.0"})
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                osv = json.loads(resp.read())
+            fix = _best_fix_from_events(osv, installed_version)
+            if fix:
+                return fix
+        except urllib.error.HTTPError as e:
+            # OSV 404 bodies often name the correct alias — follow it
+            try:
+                body = e.read().decode()
+                m = _OSV_ALIAS_RE.search(body)
+                if m and m.group(1) not in seen:
+                    queue.append(m.group(1))
+            except Exception:
+                pass
+        except Exception:
+            pass
+
+    return None
+
+
+def _nvd_fix_version(cve_id: str, installed_version: str) -> str | None:
+    """Return the fix version from NVD CPE data for a CVE, or None."""
+    try:
+        url = (f"https://services.nvd.nist.gov/rest/json/cves/2.0?cveId={cve_id}")
+        req = urllib.request.Request(url, headers={"User-Agent": "discovery-cve-check/1.0"})
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = json.loads(resp.read())
+    except Exception:
+        return None
+
+    best_fix: str | None = None
+    best_start: str = "0"
+
+    for item in data.get("vulnerabilities", []):
+        for cfg in item.get("cve", {}).get("configurations", []):
+            for node in cfg.get("nodes", []):
+                for cpe in node.get("cpeMatch", []):
+                    if not cpe.get("vulnerable"):
+                        continue
+                    end_excl = cpe.get("versionEndExcluding")
+                    if not end_excl:
+                        continue
+                    start = cpe.get("versionStartIncluding") or "0"
+                    # Range applies if installed >= start (highest matching start wins)
+                    if evr_gte(installed_version, start):
+                        if best_fix is None or evr_gte(start, best_start):
+                            best_fix = end_excl
+                            best_start = start
+
+    return best_fix
+
+
+def _best_fix_from_events(osv: dict, installed_version: str) -> str | None:
+    """Extract the applicable fix version from OSV ECOSYSTEM range events."""
+    best_fix: str | None = None
+    best_start: str = "0"
+    for aff in osv.get("affected", []):
+        for r in aff.get("ranges", []):
+            if r.get("type") != "ECOSYSTEM":
+                continue
+            introduced = "0"
+            for ev in r.get("events", []):
+                if "introduced" in ev:
+                    introduced = ev["introduced"]
+                elif "fixed" in ev:
+                    fix = ev["fixed"]
+                    if evr_gte(installed_version, introduced):
+                        if best_fix is None or evr_gte(introduced, best_start):
+                            best_fix = fix
+                            best_start = introduced
+    return best_fix
+
+
+def _advisory_fix_version(cve_id: str, installed_version: str) -> str | None:
+    """Last-resort fix-version lookup: GitHub Advisory → OSV → NVD.
+
+    Called only when fixed_packages is empty and packages were found in the
+    container. Returns a semver fix version (e.g. '26.1.2') that can be
+    compared directly against the RPM version number.
+    """
+    cache_key = f"{cve_id}:{installed_version}"
+    if cache_key in _advisory_fix_cache:
+        return _advisory_fix_cache[cache_key]
+
+    fix: str | None = None
+
+    # 1 — OSV: try both the CVE ID and the GHSA ID (if we can get it).
+    # OSV 404 responses include alias hints, so we follow them automatically.
+    # Starting with the CVE ID catches cases where GHSA 404s but PYSEC records exist.
+    osv_ids: list[str] = [cve_id]
+    ghsa_id = _gh_ghsa_id(cve_id)
+    if ghsa_id:
+        osv_ids.append(ghsa_id)
+    fix = _osv_fix_version(osv_ids, installed_version)
+
+    # 2 — NVD: final fallback when OSV has no ECOSYSTEM ranges for any alias
+    if fix is None:
+        fix = _nvd_fix_version(cve_id, installed_version)
+
+    _advisory_fix_cache[cache_key] = fix
+    return fix
+
+
 # ── Load input files ──────────────────────────────────────────────────────────
 
 def load_json(path: str, label: str) -> dict | None:
@@ -274,17 +457,27 @@ def check_cve_in_container(cve: dict, container: str) -> dict:
             search_names.add(name)
     search_names.update(fixed_by_name.keys())
 
-    result["searched_names"] = sorted(search_names)
-
     if not search_names:
         return result
 
     container_index = rpm_index.get(container, {})
 
+    # searched_names records the logical/canonical names from the CVE data.
+    # This is what flows into package_names in the comparison report and into
+    # find-unknown-packages.py — it should not include binary RPM expansion names.
+    result["searched_names"] = sorted(search_names)
+
+    # Expand 'python-X' source package names to include binary RPM variants
+    # (python3-X, python3.12-X, python3.12-X-wheel, etc.) present in the index.
+    # This expansion is an internal search detail and is NOT written to searched_names.
+    effective_names: set[str] = set()
+    for name in search_names:
+        effective_names.update(_expand_python_names(name, container_index))
+
     found_nvras: list[str] = []
     relevant_fixed_nvr: str | None = None
 
-    for name in search_names:
+    for name in effective_names:
         matches = container_index.get(name, [])
         for m in matches:
             found_nvras.append(m["nvra"])
@@ -300,13 +493,33 @@ def check_cve_in_container(cve: dict, container: str) -> dict:
 
     result["package_found"] = True
 
+    # Last-resort: if packages found but no minimum fixed NVR (no errata yet),
+    # query GitHub Advisory → OSV → NVD for a fix version.
+    if relevant_fixed_nvr is None:
+        # Extract installed version from the first found NVRA for range matching
+        installed_ver: str | None = None
+        for name in effective_names:
+            for m in container_index.get(name, []):
+                installed_ver = m["version"]
+                break
+            if installed_ver:
+                break
+        if installed_ver:
+            adv_fix = _advisory_fix_version(cve["cve_id"], installed_ver)
+            if adv_fix:
+                log(f"  {cve['cve_id']}: fix version {adv_fix!r} from advisory "
+                    f"(no errata NVR available)")
+                relevant_fixed_nvr = adv_fix
+                result["minimum_fixed_nvr"] = adv_fix
+
     if relevant_fixed_nvr is None:
         return result  # is_fixed stays None — fix version unknown
 
-    # is_fixed = True only if ALL matching packages are at or above the fixed version
+    # is_fixed = True only if ALL matching packages are at or above the fixed version.
+    # Use effective_names (expanded set) so binary RPM variants are all checked.
     all_fixed = all(
         evr_gte(f"{m['version']}-{m['release']}", relevant_fixed_nvr)
-        for name in search_names
+        for name in effective_names
         for m in container_index.get(name, [])
     )
     result["is_fixed"] = all_fixed

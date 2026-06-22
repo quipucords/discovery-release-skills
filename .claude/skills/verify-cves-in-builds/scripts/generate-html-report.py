@@ -498,8 +498,7 @@ def status_cell(entry: dict | None) -> str:
     is_fixed  = entry.get("is_fixed")
     pkg_found = entry.get("package_found", False)
     searched  = entry.get("searched_names", [])
-    installed = entry.get("installed_nvras", [])
-    fix_nvr   = entry.get("minimum_fixed_nvr") or ""
+    source    = entry.get("source_check", False)
 
     if is_fixed is True:
         badge = status_badge("fixed", "Fixed")
@@ -514,6 +513,8 @@ def status_cell(entry: dict | None) -> str:
     else:
         return status_badge("na", "N/A")
 
+    if source:
+        badge += ' <small title="Determined from source code lockfile">[src]</small>'
     return badge
 
 
@@ -541,21 +542,39 @@ def detail_row_html(ds: dict, us: dict, col_count: int) -> str:
             entry = containers.get(ckey)
             if not entry:
                 continue
-            installed = entry.get("installed_nvras", [])
-            fix_nvr   = entry.get("minimum_fixed_nvr") or "—"
-            searched  = entry.get("searched_names", [])
-            if installed:
-                installed_html = "<br>".join(f"<code>{escape(n)}</code>" for n in installed)
-            elif searched:
-                installed_html = "<em>not found in image</em>"
+
+            if entry.get("source_check"):
+                # Source-based entry: show semver/pip version rather than NVRs
+                installed_ver = entry.get("installed_version", "")
+                fix_ver = entry.get("minimum_fixed_version") or "—"
+                lockfile = entry.get("lockfile", "?")
+                if installed_ver:
+                    installed_html = f"<code>{escape(installed_ver)}</code>"
+                else:
+                    installed_html = "<em>not found in source</em>"
+                fix_html = f"<code>{escape(fix_ver)}</code>"
+                src_note = (f' <span style="font-size:0.75em;color:var(--text-muted)">'
+                            f'(source: {escape(lockfile)})</span>')
+                label_html = escape(set_label) + src_note
             else:
-                installed_html = "<em>no RPM data</em>"
+                installed = entry.get("installed_nvras", [])
+                fix_nvr   = entry.get("minimum_fixed_nvr") or "—"
+                searched  = entry.get("searched_names", [])
+                if installed:
+                    installed_html = "<br>".join(f"<code>{escape(n)}</code>" for n in installed)
+                elif searched:
+                    installed_html = "<em>not found in image</em>"
+                else:
+                    installed_html = "<em>no RPM data</em>"
+                fix_html = f"<code>{escape(fix_nvr)}</code>"
+                label_html = escape(set_label)
+
             detail_rows.append(
                 f"<tr>"
-                f"<td class='det-set'>{escape(set_label)}</td>"
+                f"<td class='det-set'>{label_html}</td>"
                 f"<td class='det-img'>{escape(short)} ({escape(group)})</td>"
                 f"<td class='det-installed'>{installed_html}</td>"
-                f"<td class='det-fix'><code>{escape(fix_nvr)}</code></td>"
+                f"<td class='det-fix'>{fix_html}</td>"
                 f"</tr>"
             )
     inner = (
