@@ -63,6 +63,7 @@ if args.comparison:
     mode         = "comparison"
     cves         = data.get("cves", [])
     generated_at = data.get("generated_at", "unknown")
+    build_info   = data.get("build_info")
 else:
     _sn = args.set_name
     try:
@@ -82,6 +83,7 @@ else:
     cves          = data.get("cves", [])
     verified_at   = data.get("verified_at", "unknown")
     generated_at  = verified_at
+    build_info    = data.get("build_info")
 
 
 # ── CSS (pure string — no f-string, so CSS braces need no escaping) ──────────
@@ -444,6 +446,59 @@ CSS = """
     margin-top: 2rem;
     padding-bottom: 2rem;
   }
+
+  /* ── Build-info section ──────────────────────────────────────────────── */
+  .build-info {
+    margin-top: 2rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 0.75rem;
+    padding: 1.25rem;
+  }
+  .build-info h2 {
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: var(--text-subtle);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 1rem;
+  }
+  .build-info h3 {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin: 0.75rem 0 0.4rem;
+  }
+  .build-info h3:first-of-type { margin-top: 0; }
+  .build-info-table {
+    border-collapse: collapse;
+    font-size: 0.78rem;
+    width: 100%;
+    margin-bottom: 0.5rem;
+  }
+  .build-info-table td {
+    padding: 0.2rem 1rem 0.2rem 0;
+    vertical-align: top;
+    color: var(--text);
+  }
+  .build-info-table td:first-child {
+    white-space: nowrap;
+    font-weight: 600;
+    color: var(--text-subtle);
+    min-width: 10rem;
+  }
+  .build-info-table .digest {
+    font-family: ui-monospace, monospace;
+    font-size: 0.72rem;
+    color: var(--text-muted);
+  }
+  .build-info-not-checked {
+    font-style: italic;
+    color: var(--text-muted);
+    font-size: 0.78rem;
+  }
 """
 
 
@@ -681,6 +736,71 @@ def make_rows(cves, images):
                 "package_names":    pkg_names,
             })
     return rows
+
+
+# ── Build-info footer ─────────────────────────────────────────────────────────
+
+def _image_rows_html(images: dict) -> str:
+    """Render a table of container image tag + digest rows."""
+    rows = []
+    for key, entry in images.items():
+        short = key.split("/")[-1]
+        if isinstance(entry, dict):
+            img    = entry.get("image") or key
+            digest = entry.get("digest")
+        else:
+            img, digest = entry or key, None
+        tag = img.split(":")[-1] if ":" in img else ""
+        label = f"{escape(short)}:{escape(tag)}" if tag else escape(short)
+        digest_html = (f'<span class="digest" title="{escape(digest)}">'
+                       f'{escape(digest[:19])}…</span>'
+                       if digest else '<span class="digest">(digest unavailable)</span>')
+        rows.append(f"<tr><td>{label}</td><td>{escape(img)}</td><td>{digest_html}</td></tr>")
+    return "\n".join(rows)
+
+
+def build_info_html(bi: dict | None, mode: str) -> str:
+    if not bi:
+        return ""
+    parts = ['<div class="build-info"><h2>What was checked</h2>']
+
+    if mode == "comparison":
+        ds_images = bi.get("downstream", {})
+        us_images = bi.get("upstream", {})
+        if ds_images:
+            parts.append(f'<h3>{escape(_PRODUCT_NAME)} (downstream)</h3>'
+                         f'<table class="build-info-table">{_image_rows_html(ds_images)}</table>')
+        if us_images:
+            parts.append(f'<h3>{escape(_UPSTREAM_PRODUCT_NAME)} (upstream)</h3>'
+                         f'<table class="build-info-table">{_image_rows_html(us_images)}</table>')
+    else:
+        containers = bi.get("containers", {})
+        if containers:
+            parts.append(f'<table class="build-info-table">{_image_rows_html(containers)}</table>')
+
+    source = bi.get("source")
+    parts.append("<h3>Source repos</h3>")
+    if source:
+        src_rows = []
+        for ecosystem, info in source.items():
+            commitish = escape(info.get("commitish") or "")
+            sha       = info.get("sha") or ""
+            sha_short = sha[:12] if sha else ""
+            sha_html  = (f'<span class="digest" title="{escape(sha)}">{escape(sha_short)}</span>'
+                         if sha_short else "")
+            ref_html  = f"{commitish} @ {sha_html}" if sha_html else commitish
+            path      = escape(info.get("path") or "")
+            src_rows.append(
+                f"<tr><td>{escape(ecosystem)}</td>"
+                f"<td>{ref_html}</td>"
+                f"<td>{path}</td></tr>"
+            )
+        parts.append(f'<table class="build-info-table">{"".join(src_rows)}</table>')
+    else:
+        parts.append('<p class="build-info-not-checked">Source repos: not checked</p>')
+
+    parts.append("</div>")
+    return "\n".join(parts)
 
 
 # ── Section builders ──────────────────────────────────────────────────────────
@@ -1100,6 +1220,8 @@ html = f"""<!DOCTYPE html>
       </tbody>
     </table>
   </div>
+
+  {build_info_html(build_info, mode)}
 
   <div class="footer">
     Full machine-readable data: <code>{data_ref}</code>
