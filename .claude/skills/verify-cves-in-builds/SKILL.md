@@ -313,6 +313,21 @@ After this runs, explicitly tell the user:
 > status columns side by side, a Delta column (e.g. "Backport needed"), and
 > an ACTION REQUIRED section listing CVEs that need attention.
 
+### Step 8 — Generate release notes YAML (comparison mode only)
+
+Skip this step in downstream-only and upstream-only modes.
+
+```bash
+python3 .claude/skills/verify-cves-in-builds/scripts/generate-release-notes-yaml.py
+```
+
+After this runs, explicitly tell the user:
+
+> A release notes CVE snippet has been written to `cve-data/release-notes-cves.yaml`.
+> It lists every CVE fixed upstream but not yet in the current downstream build
+> (delta: `fixed_upstream_not_downstream`), one entry per affected container.
+> Paste the `cves:` list into `spec.data.releaseNotes.cves` in your Konflux Release YAML.
+
 ## Output: `cve-data/verified-cves-downstream.json` (single-set) / `cve-data/comparison.json` (comparison)
 
 Same structure as `unified-cves.json` with two additions:
