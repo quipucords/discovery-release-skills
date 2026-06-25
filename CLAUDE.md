@@ -95,6 +95,7 @@ check-source-packages.py → compare-cve-results.py --source
 | `comparison.json` | Per-CVE delta between downstream and upstream |
 | `cve-report.html` | Filterable/sortable HTML report |
 | `package-types.json` | Manual ecosystem annotations for UNKNOWN packages |
+| `release-notes-cves.yaml` | CVE list for `spec.data.releaseNotes.cves` in a Konflux Release YAML |
 
 ### MCP servers
 
