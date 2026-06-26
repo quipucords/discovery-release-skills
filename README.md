@@ -336,3 +336,41 @@ The HTML report is filterable and sortable, supports light and dark mode, and
 prominently calls out CVEs by priority: upstream regressions first, then unfixed
 CVEs, then upstream fixes that are pending a downstream release. CVEs resolved via
 source lockfile check are annotated with **[src]** in the upstream status column.
+
+---
+
+## Development
+
+### Running the tests
+
+The test suite covers the core Python logic — RPM version comparison, CVE data
+merging, delta classification, and source package checks. No credentials, network
+access, or container images are required to run the tests.
+
+```bash
+# Run all tests (network-isolated)
+uv run --with pytest --with pytest-socket pytest tests/
+
+# Run a single test file
+uv run --with pytest --with pytest-socket pytest tests/test_rpm_check.py -v
+```
+
+`pytest-socket` blocks all real socket connections during the test run. Any test
+that accidentally attempts a live network call will fail immediately rather than
+silently hanging or returning stale data. Subprocess-based calls (e.g. `gh api`)
+are not intercepted at the socket level; those are guarded by pre-populating the
+relevant in-memory caches via `monkeypatch` in the individual tests.
+
+| Test file | What it covers |
+|-----------|---------------|
+| `test_rpm_check.py` | RPM NVRA parsing, `rpmvercmp` algorithm, `evr_gte` version comparison, module stream NVR detection, `check_cve_in_container` |
+| `test_merge_cve_data.py` | CVE registry merging, errata indexing, fixed-package extraction, catalog/prograde/JIRA source processing |
+| `test_compare_delta.py` | `container_delta` and `cve_delta` classification logic |
+| `test_source_packages.py` | Source lockfile version comparison, GHSA/OSV parsing, source-aware delta logic |
+| `test_rpm_python_expansion.py` | `_expand_python_names` — mapping `python-X` SRPMs to binary RPM variants |
+
+### Adding tests
+
+Tests live in `tests/` alongside the scripts they cover. Each test file loads its
+target script via `importlib` so the scripts themselves need no special packaging.
+Follow the pattern in any existing test file for the `_load()` helper.
