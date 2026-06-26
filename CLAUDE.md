@@ -5,11 +5,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
-# Run tests
-uv run --with pytest pytest tests/
+# Run tests (network-isolated)
+uv run --with pytest --with pytest-socket pytest tests/
 
 # Run a single test file
-uv run --with pytest pytest tests/test_compare_delta.py
+uv run --with pytest --with pytest-socket pytest tests/test_compare_delta.py
 
 # Invoke a skill script directly (always use relative paths from project root)
 python3 .claude/skills/<skill-name>/scripts/<script>.py [args]

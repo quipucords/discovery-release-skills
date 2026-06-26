@@ -319,6 +319,9 @@ def test_check_source_package_found_no_fixed_version(monkeypatch):
     # Should report package_found=True and installed_version, is_fixed stays None.
     fake_cve_id = "CVE-9999-99999"
     monkeypatch.setitem(_advisory_cache, fake_cve_id, [])  # empty — no advisory
+    # No GHSA ID means the code falls through to NVD on the second advisory lookup
+    # (with the real installed version).  Block that subprocess/HTTP call too.
+    monkeypatch.setattr(_mod, "_nvd_fixed_version", lambda *a, **kw: None)
     cve = {
         "cve_id": fake_cve_id,
         "notes": [f"Package name from JIRA: 'ws' (upstream name; may differ from RPM name)"],
@@ -332,9 +335,11 @@ def test_check_source_package_found_no_fixed_version(monkeypatch):
     assert result["is_fixed"] is None
 
 
-def test_check_source_package_not_present_no_fixed_version():
+def test_check_source_package_not_present_no_fixed_version(monkeypatch):
     # Package name known, but NOT in lockfile, and no fixed version.
     # package_found stays False, is_fixed stays None.
+    # Populate cache to prevent subprocess call to `gh api` (not caught by socket guard).
+    monkeypatch.setitem(_advisory_cache, "CVE-2026-00001", [])
     cve = {
         "cve_id": "CVE-2026-00001",
         "notes": ["Package name from JIRA: 'missing-pkg' (upstream name; may differ from RPM name)"],
@@ -655,10 +660,14 @@ def test_check_source_below_vulnerable_range(monkeypatch):
 
 def test_check_source_ghsa_fallback(monkeypatch):
     # CVE has package name in notes but no fixed version — GHSA lookup fills it in
-    import unittest.mock
     adv = _make_advisory("CVE-2026-48779", "GHSA-96hv-2xvq-fx4p", "npm", "ws",
                          [(">= 8.0.0, < 8.21.0", "8.21.0")])
     monkeypatch.setitem(_advisory_cache, "CVE-2026-48779", [adv])
+    # OSV is fetched for canonical package name when a GHSA ID is present.
+    # Provide a minimal truthy stub so the `or` short-circuits and the CVE-ID
+    # fallback fetch is never attempted.  No "affected" key → no canonical name
+    # extracted, which is fine: fix version already comes from GHSA.
+    monkeypatch.setitem(_osv_cache, "GHSA-96hv-2xvq-fx4p", {"id": "GHSA-96hv-2xvq-fx4p"})
 
     cve = {
         "cve_id": "CVE-2026-48779",
@@ -677,6 +686,7 @@ def test_check_source_ghsa_fallback_already_fixed(monkeypatch):
     adv = _make_advisory("CVE-2026-48779", "GHSA-96hv-2xvq-fx4p", "npm", "ws",
                          [(">= 8.0.0, < 8.21.0", "8.21.0")])
     monkeypatch.setitem(_advisory_cache, "CVE-2026-48779", [adv])
+    monkeypatch.setitem(_osv_cache, "GHSA-96hv-2xvq-fx4p", {"id": "GHSA-96hv-2xvq-fx4p"})
 
     cve = {
         "cve_id": "CVE-2026-48779",
