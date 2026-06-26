@@ -427,6 +427,24 @@ for container, path in RPM_FILES.items():
         log(f"  Skipping {container}: not in checked-images-{set_name}.json (was not pulled)")
 
 
+# ── Module stream NVR detection ───────────────────────────────────────────────
+
+_MODULE_STREAM_RELEASE_RE = re.compile(r'^\d{10,}(\.\d+)?$')
+
+
+def _is_module_stream_nvr(nvr: str) -> bool:
+    """Return True if nvr belongs to an RHEL Application Stream module stream.
+
+    Module stream NVRs (e.g. 'nginx-1.24-9080020260610161820.9') carry a release
+    component that is a large integer timestamp (YYYYMMDDHHMMSS, 13-19 digits)
+    optionally followed by '.N'.  These identify the module stream metadata package,
+    not the binary RPM installed in the container, so version comparison against
+    an installed binary NVR is meaningless and must be skipped.
+    """
+    evr = parse_evr(nvr)
+    return bool(_MODULE_STREAM_RELEASE_RE.match(evr[2]))
+
+
 # ── Check each CVE against container RPM lists ───────────────────────────────
 
 def check_cve_in_container(cve: dict, container: str) -> dict:
@@ -446,12 +464,19 @@ def check_cve_in_container(cve: dict, container: str) -> dict:
     # fixed_packages may list multiple NVRs for the same package across different
     # RHEL releases; we keep the earliest (minimum) to avoid false "fixed" verdicts.
     fixed_by_name: dict[str, str] = {}
+    module_stream_skipped: list[str] = []
     for fp in cve.get("fixed_packages", []):
         name = package_name_from_entry(fp)
         nvr  = fp.get("nvr")
         if name and nvr:
+            if _is_module_stream_nvr(nvr):
+                module_stream_skipped.append(nvr)
+                continue
             if name not in fixed_by_name or parse_evr(nvr) < parse_evr(fixed_by_name[name]):
                 fixed_by_name[name] = nvr
+    if module_stream_skipped:
+        log(f"  {cve['cve_id']}: skipped {len(module_stream_skipped)} module stream fix NVR(s) "
+            f"({', '.join(module_stream_skipped)}) — not comparable to binary package versions")
 
     # Collect candidate package names from both vulnerable_packages and fixed_packages.
     # We search both because:
