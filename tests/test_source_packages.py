@@ -540,9 +540,10 @@ def test_get_ghsa_fixed_version_single_range():
     adv = _make_advisory("CVE-2026-6322", "GHSA-v39h-62p7-jpjc", "npm", "fast-uri",
                          [("<= 3.1.1", "3.1.2")])
     with _with_cache("CVE-2026-6322", [adv]):
-        fixed, ghsa = _get_ghsa_fixed_version("CVE-2026-6322", "npm", "fast-uri", "3.1.1")
+        fixed, ghsa, below_range = _get_ghsa_fixed_version("CVE-2026-6322", "npm", "fast-uri", "3.1.1")
     assert fixed == "3.1.2"
     assert ghsa == "GHSA-v39h-62p7-jpjc"
+    assert below_range is False
 
 
 def test_get_ghsa_fixed_version_multi_range_picks_correct_one():
@@ -556,9 +557,10 @@ def test_get_ghsa_fixed_version_multi_range_picks_correct_one():
     adv = _make_advisory("CVE-2026-48779", "GHSA-96hv-2xvq-fx4p", "npm", "ws", ranges)
     # 8.20.0 is in the >= 8.0.0, < 8.21.0 range
     with _with_cache("CVE-2026-48779", [adv]):
-        fixed, ghsa = _get_ghsa_fixed_version("CVE-2026-48779", "npm", "ws", "8.20.0")
+        fixed, ghsa, below_range = _get_ghsa_fixed_version("CVE-2026-48779", "npm", "ws", "8.20.0")
     assert fixed == "8.21.0"
     assert ghsa == "GHSA-96hv-2xvq-fx4p"
+    assert below_range is False
 
 
 def test_get_ghsa_installed_at_fix_version():
@@ -568,9 +570,10 @@ def test_get_ghsa_installed_at_fix_version():
     ranges = [(">= 8.0.0, < 8.21.0", "8.21.0")]
     adv = _make_advisory("CVE-2026-48779", "GHSA-96hv-2xvq-fx4p", "npm", "ws", ranges)
     with _with_cache("CVE-2026-48779", [adv]):
-        fixed, ghsa = _get_ghsa_fixed_version("CVE-2026-48779", "npm", "ws", "8.21.0")
+        fixed, ghsa, below_range = _get_ghsa_fixed_version("CVE-2026-48779", "npm", "ws", "8.21.0")
     assert fixed == "8.21.0"
     assert ghsa == "GHSA-96hv-2xvq-fx4p"
+    assert below_range is False
 
 
 def test_get_ghsa_installed_above_all_series():
@@ -579,15 +582,17 @@ def test_get_ghsa_installed_above_all_series():
     ranges = [(">= 8.0.0, < 8.21.0", "8.21.0")]
     adv = _make_advisory("CVE-X", "GHSA-X", "npm", "ws", ranges)
     with _with_cache("CVE-X", [adv]):
-        fixed, _ = _get_ghsa_fixed_version("CVE-X", "npm", "ws", "9.0.0")
+        fixed, _, below_range = _get_ghsa_fixed_version("CVE-X", "npm", "ws", "9.0.0")
     assert fixed == "8.21.0"  # range found; version_gte("9.0.0","8.21.0")=True → fixed
+    assert below_range is False
 
 
 def test_get_ghsa_wrong_ecosystem_ignored():
     adv = _make_advisory("CVE-X", "GHSA-X", "pip", "fast-uri", [("<= 3.1.1", "3.1.2")])
     with _with_cache("CVE-X", [adv]):
-        fixed, _ = _get_ghsa_fixed_version("CVE-X", "npm", "fast-uri", "3.1.1")
+        fixed, _, below_range = _get_ghsa_fixed_version("CVE-X", "npm", "fast-uri", "3.1.1")
     assert fixed is None
+    assert below_range is False
 
 
 def test_get_ghsa_case_insensitive_package_name():
@@ -595,8 +600,57 @@ def test_get_ghsa_case_insensitive_package_name():
                          [(">= 1.1.0, <= 1.8.3", "1.8.4")])
     with _with_cache("CVE-2026-9277", [adv]):
         # JIRA provides "Shell-Quote" with capital letters
-        fixed, _ = _get_ghsa_fixed_version("CVE-2026-9277", "npm", "Shell-Quote", "1.8.3")
+        fixed, _, below_range = _get_ghsa_fixed_version("CVE-2026-9277", "npm", "Shell-Quote", "1.8.3")
     assert fixed == "1.8.4"
+
+
+def test_get_ghsa_below_all_ranges_returns_flag():
+    # image-size case: installed 0.5.5, GHSA ranges start at >= 1.1.0 and >= 2.0.0.
+    # Version predates all documented vulnerable ranges → below_range=True.
+    ranges = [
+        (">= 1.1.0, < 1.2.1", "1.2.1"),
+        (">= 2.0.0, < 2.0.2", "2.0.2"),
+    ]
+    adv = _make_advisory("CVE-2025-71319", "GHSA-m5qc-5hw7-8vg7", "npm", "image-size", ranges)
+    with _with_cache("CVE-2025-71319", [adv]):
+        fixed, ghsa, below_range = _get_ghsa_fixed_version("CVE-2025-71319", "npm", "image-size", "0.5.5")
+    assert fixed is None
+    assert ghsa == "GHSA-m5qc-5hw7-8vg7"
+    assert below_range is True
+
+
+def test_get_ghsa_below_range_single_range():
+    # Installed 0.9.0 with range >= 1.0.0 → predates vulnerability.
+    ranges = [(">= 1.0.0, < 1.5.0", "1.5.0")]
+    adv = _make_advisory("CVE-X", "GHSA-X", "npm", "somelib", ranges)
+    with _with_cache("CVE-X", [adv]):
+        fixed, ghsa, below_range = _get_ghsa_fixed_version("CVE-X", "npm", "somelib", "0.9.0")
+    assert fixed is None
+    assert ghsa == "GHSA-X"
+    assert below_range is True
+
+
+def test_check_source_below_vulnerable_range(monkeypatch):
+    # image-size 0.5.5 is below all GHSA documented vulnerable ranges.
+    # The pipeline should mark it is_fixed=True (version predates vulnerability).
+    adv = _make_advisory("CVE-2025-71319", "GHSA-m5qc-5hw7-8vg7", "npm", "image-size", [
+        (">= 1.1.0, < 1.2.1", "1.2.1"),
+        (">= 2.0.0, < 2.0.2", "2.0.2"),
+    ])
+    monkeypatch.setitem(_advisory_cache, "CVE-2025-71319", [adv])
+
+    cve = {
+        "cve_id": "CVE-2025-71319",
+        "notes": ["Package name from JIRA: 'image-size' (upstream name; may differ from RPM name)"],
+        "affected_containers": [],
+    }
+    result = check_cve_in_source(cve, "discovery/discovery-ui-rhel9",
+                                  {"image-size": "0.5.5"}, "package-lock.json", "npm")
+    assert result["package_found"] is True
+    assert result["installed_version"] == "0.5.5"
+    assert result["is_fixed"] is True
+    assert result["ghsa_source"] == "GHSA-m5qc-5hw7-8vg7"
+    assert "(below" in result["minimum_fixed_version"]
 
 
 def test_check_source_ghsa_fallback(monkeypatch):

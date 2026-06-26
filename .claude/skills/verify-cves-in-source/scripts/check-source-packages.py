@@ -415,8 +415,8 @@ def _get_advisory_fixed_version(
     ecosystem: str,
     pkg_name: str,
     installed_version: str,
-) -> tuple[str | None, str | None, str | None]:
-    """Return (first_patched_version, ghsa_id, osv_canonical_name) from advisory databases.
+) -> tuple[str | None, str | None, str | None, bool]:
+    """Return (first_patched_version, ghsa_id, osv_canonical_name, below_all_ranges).
 
     Queries in order:
     1. GitHub Advisory Database (via `gh api`) — fast, good for npm/general
@@ -427,13 +427,22 @@ def _get_advisory_fixed_version(
     The returned osv_canonical_name is the OSV-authoritative package name for the
     given ecosystem. Callers should retry the lockfile lookup with this name if
     the original JIRA-derived name failed to match.
+
+    below_all_ranges is True when GHSA has ranges for this package/ecosystem but the
+    installed version falls below all of them (i.e., predates the documented
+    vulnerability). GHSA reviewed advisories are authoritative for this determination.
     """
     # First, get the GHSA ID from the advisory — even if it has no version ranges.
     advisories = _fetch_github_advisory(cve_id)
     ghsa_id: str | None = advisories[0].get("ghsa_id") if advisories else None
 
     # Try GHSA structured version ranges.
-    fixed_ver, _ = _get_ghsa_fixed_version(cve_id, ecosystem, pkg_name, installed_version)
+    fixed_ver, _, ghsa_below_range = _get_ghsa_fixed_version(cve_id, ecosystem, pkg_name, installed_version)
+
+    # GHSA reviewed advisories are authoritative: if the version predates all documented
+    # vulnerable ranges, return early without querying OSV or NVD.
+    if ghsa_below_range:
+        return None, ghsa_id, None, True
 
     # Fetch OSV data for canonical package name and (if needed) version ranges.
     osv_canonical: str | None = None
@@ -459,7 +468,7 @@ def _get_advisory_fixed_version(
         if fixed_ver:
             log(f"    → fix version {fixed_ver!r} from NVD for {cve_id}")
 
-    return fixed_ver, ghsa_id, osv_canonical
+    return fixed_ver, ghsa_id, osv_canonical, False
 
 
 def _nvd_fixed_version(cve_id: str, installed_version: str) -> str | None:
@@ -503,19 +512,23 @@ def _get_ghsa_fixed_version(
     ecosystem: str,
     pkg_name: str,
     installed_version: str,
-) -> tuple[str | None, str | None]:
-    """Return (first_patched_version, ghsa_id) from GitHub Advisory Database.
+) -> tuple[str | None, str | None, bool]:
+    """Return (first_patched_version, ghsa_id, below_all_ranges) from GitHub Advisory Database.
 
     For multi-range advisories (e.g. ws has separate ranges for 5.x, 6.x, 7.x, 8.x),
     finds the range whose version *series* the installed version belongs to — that is,
     the range whose lower bound is satisfied by installed_version, picking the most
-    specific match (highest lower bound). Returns (first_patched_version, ghsa_id).
+    specific match (highest lower bound). Returns (first_patched_version, ghsa_id, False).
 
     This approach works whether the package is vulnerable (version in range) or already
     fixed (version >= first_patched_version): in both cases the applicable series range
     is found via its lower bound, and the caller uses version_gte() to determine status.
 
-    Returns (None, None) if no matching advisory or no applicable range is found.
+    When matching package/ecosystem ranges exist but the installed version is below ALL
+    of their lower bounds, the version predates the documented vulnerability.
+    Returns (None, ghsa_id, True) in that case.
+
+    Returns (None, None, False) if no matching advisory or no applicable range is found.
     """
     advisories = _fetch_github_advisory(cve_id)
     normalize = _normalize_npm if ecosystem == "npm" else _normalize_pip
@@ -527,6 +540,7 @@ def _get_ghsa_fixed_version(
 
         best_vuln: dict | None = None
         best_lower: tuple | None = None
+        all_lower_bounds: list[tuple] = []
 
         for vuln in advisory.get("vulnerabilities", []):
             pkg = vuln.get("package", {})
@@ -548,6 +562,8 @@ def _get_ghsa_fixed_version(
                 elif cond.startswith(">"):
                     lower = _parse_version(cond[1:].strip())
 
+            all_lower_bounds.append(lower)
+
             # This range's series applies to installed_version when the lower
             # bound is satisfied (installed >= lower bound of the series).
             if v_installed >= lower:
@@ -557,9 +573,15 @@ def _get_ghsa_fixed_version(
                     best_lower = lower
 
         if best_vuln:
-            return best_vuln["first_patched_version"], ghsa_id
+            return best_vuln["first_patched_version"], ghsa_id, False
 
-    return None, None
+        # Matching package/ecosystem ranges exist but none covers installed_version.
+        # If all lower bounds are above the installed version, the version predates
+        # the documented vulnerability (e.g. image-size 0.5.5 vs. ranges >= 1.1.0).
+        if all_lower_bounds and all(v_installed < lb for lb in all_lower_bounds):
+            return None, ghsa_id, True
+
+    return None, None, False
 
 
 # ── Note parsing ──────────────────────────────────────────────────────────────
@@ -624,7 +646,7 @@ def check_cve_in_source(
     ghsa_id: str | None = None
     osv_canonical: str | None = None
     if fixed_ver is None:
-        adv_fixed, ghsa_id, osv_canonical = _get_advisory_fixed_version(
+        adv_fixed, ghsa_id, osv_canonical, _ = _get_advisory_fixed_version(
             cve["cve_id"], ecosystem, pkg_name, "0",  # dummy version — we need canonical name
         )
 
@@ -656,7 +678,7 @@ def check_cve_in_source(
     # Now re-run advisory lookup with the real installed version for accurate range matching.
     if fixed_ver is None:
         lookup_name = osv_canonical or pkg_name
-        adv_fixed, ghsa_id, _ = _get_advisory_fixed_version(
+        adv_fixed, ghsa_id, _, below_range = _get_advisory_fixed_version(
             cve["cve_id"], ecosystem, lookup_name, installed_version,
         )
         if adv_fixed:
@@ -664,6 +686,12 @@ def check_cve_in_source(
             fixed_ver = adv_fixed
             result["minimum_fixed_version"] = adv_fixed
             result["ghsa_source"] = ghsa_id
+        elif below_range:
+            log(f"    {cve['cve_id']}: v{installed_version} is below all documented "
+                f"vulnerable ranges in {ghsa_id} — treating as not affected")
+            result["is_fixed"] = True
+            result["ghsa_source"] = ghsa_id
+            result["minimum_fixed_version"] = "(below documented vulnerable range)"
 
     if fixed_ver is not None:
         result["is_fixed"] = version_gte(installed_version, fixed_ver)
