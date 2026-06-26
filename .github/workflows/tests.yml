@@ -13,7 +13,7 @@ jobs:
 
       - uses: astral-sh/setup-uv@v5
         with:
-          python-version: "3.11"
+          python-version: "3.14"
 
       - name: Run tests
         run: uv run --with pytest --with pytest-socket pytest tests/ -v
