@@ -148,20 +148,31 @@ def _normalize_npm(name: str) -> str:
 
 # ── Version comparison ────────────────────────────────────────────────────────
 
-def _parse_version(v: str) -> tuple:
-    """Parse a dotted version string into a comparable tuple of (int, str) pairs.
+# PEP 440 pre-release identifiers (a/alpha, b/beta, c/rc/preview, dev).
+# When matched, the segment sorts BELOW the same numeric-only version.
+_PRE_RELEASE_RE = re.compile(r"^(a|b|c|rc|alpha|beta|preview|dev)\d*$", re.IGNORECASE)
 
-    Trailing punctuation is stripped. Pre-release suffixes (e.g. "1.0.0a1") sort
-    below the same numeric-only version because the suffix str sorts < "".
+
+def _parse_version(v: str) -> tuple:
+    """Parse a dotted version string into a comparable tuple of (int, int, str) triples.
+
+    Trailing punctuation is stripped. Each segment becomes (numeric_part, pre_flag, suffix)
+    where pre_flag is -1 for known pre-release suffixes (rc, a, b, dev, …) and 0 otherwise,
+    so final releases sort above pre-releases of the same version number.
+
+    Examples: 2.20.7 > 2.20.7rc1 > 2.20.7b1 > 2.20.7a1
     """
     v = v.rstrip(".,;: ")
     parts = []
     for segment in v.split("."):
         m = re.match(r"^(\d+)(.*)", segment)
         if m:
-            parts.append((int(m.group(1)), m.group(2)))
+            num = int(m.group(1))
+            suffix = m.group(2)
+            pre_flag = -1 if (suffix and _PRE_RELEASE_RE.match(suffix)) else 0
+            parts.append((num, pre_flag, suffix))
         else:
-            parts.append((0, segment))
+            parts.append((0, 0, segment))
     return tuple(parts)
 
 

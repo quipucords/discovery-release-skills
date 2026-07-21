@@ -78,6 +78,31 @@ def test_version_gte_four_part():
     assert version_gte("1.2.3.4", "1.2.3.3") is True
 
 
+def test_version_gte_final_release_vs_rc():
+    # 2.20.7 (final) must be >= 2.20.7rc1 — rc is a pre-release, final comes after
+    assert version_gte("2.20.7", "2.20.7rc1") is True
+
+
+def test_version_gte_rc_not_gte_final():
+    assert version_gte("2.20.7rc1", "2.20.7") is False
+
+
+def test_version_gte_final_vs_alpha():
+    assert version_gte("1.0.0", "1.0.0a1") is True
+
+
+def test_version_gte_final_vs_beta():
+    assert version_gte("1.0.0", "1.0.0b2") is True
+
+
+def test_version_gte_beta_not_gte_final():
+    assert version_gte("1.0.0b2", "1.0.0") is False
+
+
+def test_version_gte_rc_equal_to_same_rc():
+    assert version_gte("2.20.7rc1", "2.20.7rc1") is True
+
+
 # ── name normalization ────────────────────────────────────────────────────────
 
 def test_normalize_pip_lowercase():
