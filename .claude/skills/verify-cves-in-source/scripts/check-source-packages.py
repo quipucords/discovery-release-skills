@@ -606,7 +606,7 @@ def _get_ghsa_fixed_version(
 
 # ── Note parsing ──────────────────────────────────────────────────────────────
 
-_JIRA_PKG_RE = re.compile(r"Package name from JIRA:\s+'([^']+)'")
+_JIRA_PKG_RE = re.compile(r"Package name from (?:JIRA|OSV):\s+'([^']+)'")
 _JIRA_VER_RE = re.compile(r"Upstream fixed version from JIRA:\s+([^\s(]+)")
 
 

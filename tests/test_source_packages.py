@@ -140,6 +140,18 @@ def test_extract_jira_hints_missing_package():
     assert ver == "1.0.0"
 
 
+def test_extract_jira_hints_reads_osv_sourced_package_note():
+    # Notes written by enrich_package_names_from_osv use "from OSV:" instead of
+    # "from JIRA:" — _extract_jira_hints must accept both so verify-cves-in-source
+    # can process CVEs enriched via the OSV fallback path.
+    notes = [
+        "Package name from OSV: 'ansible-core' (PyPI; upstream name, may differ from RPM name)"
+    ]
+    pkg, ver = _extract_jira_hints(notes)
+    assert pkg == "ansible-core"
+    assert ver is None
+
+
 # ── _read_pip_lockfile ────────────────────────────────────────────────────────
 
 def test_read_pip_lockfile_basic(tmp_path):
