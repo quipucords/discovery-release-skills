@@ -248,7 +248,11 @@ def _warn_if_gh_unavailable() -> None:
             "`gh auth login` to enable GitHub Advisory enrichment."
         )
     except subprocess.TimeoutExpired:
-        pass
+        log(
+            "Warning: `gh` CLI timed out during auth check. "
+            "CVEs without errata data will have fewer fix-version lookups. "
+            "Run `gh auth login` to enable GitHub Advisory enrichment."
+        )
 
 
 _OSV_ALIAS_RE = re.compile(r'aliases were: ([A-Z]+-\d+-\d+)')

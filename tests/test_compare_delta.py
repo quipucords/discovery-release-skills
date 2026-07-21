@@ -13,6 +13,7 @@ def _load():
 
 _mod = _load()
 container_delta = _mod.container_delta
+source_aware_delta = _mod.source_aware_delta
 cve_delta = _mod.cve_delta
 DELTA_PRIORITY = _mod.DELTA_PRIORITY
 
@@ -106,3 +107,19 @@ def test_no_package_data_fix_available_true_stays_unknown():
     ds = {"is_fixed": None, "searched_names": [], "package_found": False}
     us = {"is_fixed": None, "searched_names": [], "package_found": False}
     assert container_delta(ds, us, fix_available=True) == "unknown"
+
+
+# ── source_aware_delta propagates fix_available ───────────────────────────────
+
+def test_source_aware_delta_fix_unavailable_is_not_fixed_in_either():
+    # fix_available=False must propagate through source_aware_delta so the
+    # no-package-data case is classified correctly, not left as "unknown".
+    ds = {"is_fixed": None, "searched_names": [], "package_found": False}
+    us = {"is_fixed": None, "searched_names": [], "package_found": False}
+    assert source_aware_delta(ds, us, fix_available=False) == "not_fixed_in_either"
+
+
+def test_source_aware_delta_fix_available_none_stays_unknown():
+    ds = {"is_fixed": None, "searched_names": [], "package_found": False}
+    us = {"is_fixed": None, "searched_names": [], "package_found": False}
+    assert source_aware_delta(ds, us) == "unknown"

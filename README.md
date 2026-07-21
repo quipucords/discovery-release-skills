@@ -51,7 +51,8 @@ To create credentials (one-time setup):
 1. Go to [console.cloud.google.com](https://console.cloud.google.com/) and create or select a project.
 2. Enable the **Gmail API** for that project (APIs & Services → Library).
 3. Create an OAuth 2.0 credential: APIs & Services → Credentials → Create Credentials → **OAuth client ID** → Application type: **Desktop app**.
-4. Download the JSON file and save it as `~/.config/gmail/credentials.json`.
+4. Create the destination directory if needed: `mkdir -p ~/.config/gmail`.
+5. Download the JSON file and save it as `~/.config/gmail/credentials.json`.
 
 See the [Gmail API Quickstart](https://developers.google.com/gmail/api/quickstart/python)
 for full instructions. If you don't receive Prograde advisory emails,
@@ -206,7 +207,7 @@ If you want to skip the interactive questions and accept all defaults (Prograde
 since last release, compare downstream vs. upstream, all `latest` tags, source
 check against `main`), append `default`:
 
-```
+```text
 /run-cve-check-pipeline default
 ```
 
