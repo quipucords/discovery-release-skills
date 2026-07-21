@@ -282,13 +282,33 @@ def _fetch_github_advisory(cve_id: str) -> list:
             _advisory_cache[cve_id] = advisories
             return advisories
     except FileNotFoundError:
-        log("  Warning: `gh` CLI not found — skipping GitHub Advisory lookup.")
+        pass
     except subprocess.TimeoutExpired:
         log(f"  Warning: GitHub Advisory lookup timed out for {cve_id}.")
     except json.JSONDecodeError:
         pass
     _advisory_cache[cve_id] = []
     return []
+
+
+def _warn_if_gh_unavailable() -> None:
+    try:
+        result = subprocess.run(["gh", "auth", "status"], capture_output=True, timeout=5)
+        if result.returncode != 0:
+            log(
+                "Warning: `gh` CLI is installed but not authenticated. "
+                "Fix-version lookups for npm/pip CVEs will be less complete — "
+                "GitHub Advisory Database will be skipped. "
+                "Run `gh auth login` to enable it."
+            )
+    except FileNotFoundError:
+        log(
+            "Warning: `gh` CLI not found. Fix-version lookups for npm/pip CVEs "
+            "will be less complete — GitHub Advisory Database will be skipped. "
+            "Install gh (https://cli.github.com) and run `gh auth login` to enable it."
+        )
+    except subprocess.TimeoutExpired:
+        pass
 
 
 # Maps our internal ecosystem names to the names OSV uses.
@@ -754,6 +774,7 @@ if __name__ == "__main__":
                          help="Skip confirmation prompts for repos with uncommitted changes")
     _args = _parser.parse_args()
 
+    _warn_if_gh_unavailable()
     log("Loading cve-data/unified-cves.json...")
     try:
         with open("cve-data/unified-cves.json") as f:
