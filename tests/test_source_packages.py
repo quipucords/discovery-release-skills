@@ -103,6 +103,24 @@ def test_version_gte_rc_equal_to_same_rc():
     assert version_gte("2.20.7rc1", "2.20.7rc1") is True
 
 
+def test_version_gte_rc10_greater_than_rc2():
+    # Serial number must compare numerically: rc10 > rc2, not string-sorted
+    assert version_gte("1.0.0rc10", "1.0.0rc2") is True
+    assert version_gte("1.0.0rc2", "1.0.0rc10") is False
+
+
+def test_version_gte_c_and_rc_are_equivalent():
+    # PEP 440: 'c' is a legacy alias for 'rc'
+    assert version_gte("1.0.0c1", "1.0.0rc1") is True
+    assert version_gte("1.0.0rc1", "1.0.0c1") is True
+
+
+def test_version_gte_dev_less_than_alpha():
+    # PEP 440 ordering: dev < a < b < rc < final
+    assert version_gte("1.0.0dev1", "1.0.0a1") is False
+    assert version_gte("1.0.0a1", "1.0.0dev1") is True
+
+
 # ── name normalization ────────────────────────────────────────────────────────
 
 def test_normalize_pip_lowercase():

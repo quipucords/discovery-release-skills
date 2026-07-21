@@ -148,19 +148,30 @@ def _normalize_npm(name: str) -> str:
 
 # ── Version comparison ────────────────────────────────────────────────────────
 
-# PEP 440 pre-release identifiers (a/alpha, b/beta, c/rc/preview, dev).
-# When matched, the segment sorts BELOW the same numeric-only version.
-_PRE_RELEASE_RE = re.compile(r"^(a|b|c|rc|alpha|beta|preview|dev)\d*$", re.IGNORECASE)
+# PEP 440 pre-release type ranks (lower = earlier in the release cycle).
+# 'c' is a legacy alias for 'rc'; 'alpha'/'beta' are aliases for 'a'/'b'.
+_PRE_RELEASE_RANKS: dict[str, int] = {
+    "dev": 0,
+    "a": 1, "alpha": 1,
+    "b": 2, "beta": 2,
+    "c": 3, "rc": 3, "preview": 3,
+}
+_FINAL_RANK = len(_PRE_RELEASE_RANKS) + 1   # sorts after all pre-release types
+_PRE_RELEASE_RE = re.compile(
+    r"^(a|b|c|rc|alpha|beta|preview|dev)(\d*)$", re.IGNORECASE
+)
 
 
 def _parse_version(v: str) -> tuple:
-    """Parse a dotted version string into a comparable tuple of (int, int, str) triples.
+    """Parse a dotted version string into a comparable tuple of (int, rank, serial) triples.
 
-    Trailing punctuation is stripped. Each segment becomes (numeric_part, pre_flag, suffix)
-    where pre_flag is -1 for known pre-release suffixes (rc, a, b, dev, …) and 0 otherwise,
-    so final releases sort above pre-releases of the same version number.
+    Trailing punctuation is stripped. Each segment becomes (numeric_part, pre_rank, serial)
+    following PEP 440 pre-release ordering:
+      dev (0) < alpha/a (1) < beta/b (2) < rc/c/preview (3) < final release (4)
+    Serial numbers are compared as integers so rc10 > rc2.
+    'c' and 'rc' map to the same rank so they compare as equivalent.
 
-    Examples: 2.20.7 > 2.20.7rc1 > 2.20.7b1 > 2.20.7a1
+    Examples: 2.20.7 > 2.20.7rc10 > 2.20.7rc2 > 2.20.7b1 > 2.20.7a1 > 2.20.7dev1
     """
     v = v.rstrip(".,;: ")
     parts = []
@@ -169,10 +180,15 @@ def _parse_version(v: str) -> tuple:
         if m:
             num = int(m.group(1))
             suffix = m.group(2)
-            pre_flag = -1 if (suffix and _PRE_RELEASE_RE.match(suffix)) else 0
-            parts.append((num, pre_flag, suffix))
+            pre_m = _PRE_RELEASE_RE.match(suffix) if suffix else None
+            if pre_m:
+                rank = _PRE_RELEASE_RANKS[pre_m.group(1).lower()]
+                serial = int(pre_m.group(2)) if pre_m.group(2) else 0
+            else:
+                rank, serial = _FINAL_RANK, 0
+            parts.append((num, rank, serial))
         else:
-            parts.append((0, 0, segment))
+            parts.append((0, _FINAL_RANK, 0))
     return tuple(parts)
 
 
