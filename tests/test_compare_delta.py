@@ -79,3 +79,30 @@ def test_regression_beats_pending_release():
     # A container with a regression should outrank one just pending a release
     deltas = {"server": "fixed_upstream_not_downstream", "ui": "fixed_downstream_not_upstream"}
     assert cve_delta(deltas) == "fixed_downstream_not_upstream"
+
+
+# ── fix_available parameter on container_delta ────────────────────────────────
+# CVE-2026-11332: JIRA-only CVE, fix_available=False, no package data on either side.
+# Without a package name to search for, the delta was "unknown" — but we know the
+# fix hasn't been released yet, so it should be "not_fixed_in_either".
+
+def test_no_package_data_fix_unavailable_is_not_fixed_in_either():
+    ds = {"is_fixed": None, "searched_names": [], "package_found": False}
+    us = {"is_fixed": None, "searched_names": [], "package_found": False}
+    assert container_delta(ds, us, fix_available=False) == "not_fixed_in_either"
+
+
+def test_no_package_data_fix_available_none_stays_unknown():
+    # Default: fix_available omitted (None) → unknown, as before.
+    ds = {"is_fixed": None, "searched_names": [], "package_found": False}
+    us = {"is_fixed": None, "searched_names": [], "package_found": False}
+    assert container_delta(ds, us) == "unknown"
+    assert container_delta(ds, us, fix_available=None) == "unknown"
+
+
+def test_no_package_data_fix_available_true_stays_unknown():
+    # fix_available=True means a fix exists in errata but we couldn't match a package —
+    # still unknown because we can't confirm the container got it.
+    ds = {"is_fixed": None, "searched_names": [], "package_found": False}
+    us = {"is_fixed": None, "searched_names": [], "package_found": False}
+    assert container_delta(ds, us, fix_available=True) == "unknown"
