@@ -232,6 +232,25 @@ def _gh_ghsa_id(cve_id: str) -> str | None:
     return None
 
 
+def _warn_if_gh_unavailable() -> None:
+    try:
+        result = subprocess.run(["gh", "auth", "status"], capture_output=True, timeout=5)
+        if result.returncode != 0:
+            log(
+                "Warning: `gh` CLI is installed but not authenticated. "
+                "CVEs without errata data will have fewer fix-version lookups. "
+                "Run `gh auth login` to enable GitHub Advisory enrichment."
+            )
+    except FileNotFoundError:
+        log(
+            "Warning: `gh` CLI not found. CVEs without errata data will have fewer "
+            "fix-version lookups. Install gh (https://cli.github.com) and run "
+            "`gh auth login` to enable GitHub Advisory enrichment."
+        )
+    except subprocess.TimeoutExpired:
+        pass
+
+
 _OSV_ALIAS_RE = re.compile(r'aliases were: ([A-Z]+-\d+-\d+)')
 
 
@@ -408,6 +427,7 @@ def image_url(checked_images: dict, container: str) -> str | None:
     return entry
 
 
+_warn_if_gh_unavailable()
 log("Loading input files...")
 
 unified = load_json("cve-data/unified-cves.json", "unified-cves.json")
