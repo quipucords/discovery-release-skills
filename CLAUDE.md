@@ -125,9 +125,16 @@ Set in `~/.claude/settings.json` or `.claude/settings.local.json`:
 | `JIRA_EMAIL` | query-jira-cves |
 | `JIRA_API_TOKEN` | query-jira-cves |
 | `ERRATA_HOST` | query-errata-advisory |
-| `BREW_HOST` | query-errata-advisory (optional, for Brew UI links) |
-| `PROGRADE_SENDER` | query-gmail |
-| `PROGRADE_LABEL` | query-gmail |
+
+#### Optional overrides (have defaults)
+
+| Variable | Default | Used by |
+|----------|---------|---------|
+| `GMAIL_CREDENTIALS_PATH` | `~/.config/gmail/credentials.json` | query-gmail — path to OAuth credentials file |
+| `GMAIL_TOKEN_PATH` | `~/.config/gmail/token.json` | query-gmail — path to OAuth token cache |
+| `JIRA_HOST` | `redhat.atlassian.net` | query-jira-cves — JIRA instance hostname |
+| `PROGRADE_LABEL` | `alerts/prograde` | query-all-cves — Gmail label to filter Prograde advisory emails |
+| `PROGRADE_SENDER` | — | query-gmail — sender filter for ad-hoc direct invocations; not used by pipeline |
 
 #### Product configuration (optional, have Discovery defaults)
 

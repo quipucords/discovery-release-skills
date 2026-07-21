@@ -144,7 +144,7 @@ elif args.use_provided_prograde:
          "cve-data/jira.json"),
     ]
 else:
-    prograde_label = os.environ.get("PROGRADE_LABEL", "")
+    prograde_label = os.environ.get("PROGRADE_LABEL", "alerts/prograde")
     gmail_cmd = ["uv", "run", f"{skills}/query-gmail/scripts/query-gmail.py"]
     if prograde_label:
         gmail_cmd += ["--label", prograde_label]

@@ -46,9 +46,20 @@ opens for authorization. Place your credentials file at:
 ```
 ~/.config/gmail/credentials.json
 ```
+
+To create credentials (one-time setup):
+1. Go to [console.cloud.google.com](https://console.cloud.google.com/) and create or select a project.
+2. Enable the **Gmail API** for that project (APIs & Services → Library).
+3. Create an OAuth 2.0 credential: APIs & Services → Credentials → Create Credentials → **OAuth client ID** → Application type: **Desktop app**.
+4. Download the JSON file and save it as `~/.config/gmail/credentials.json`.
+
 See the [Gmail API Quickstart](https://developers.google.com/gmail/api/quickstart/python)
-for how to obtain credentials. If you don't receive Prograde advisory emails,
+for full instructions. If you don't receive Prograde advisory emails,
 see [Team collaboration](#team-collaboration-sharing-prograde-data) below.
+
+> **Non-default credential paths:** Set `GMAIL_CREDENTIALS_PATH` and/or `GMAIL_TOKEN_PATH`
+> in `.claude/settings.local.json` if you store credentials outside the default locations
+> — see [Setup](#setup) for details.
 
 ### GitHub CLI (`gh`) — optional but recommended
 
@@ -100,70 +111,31 @@ upstream-only mode the login check is skipped automatically.
 
 ### 1. Set environment variables
 
-Add these to `~/.claude/settings.json` so they are available in every Claude Code
-session. This file is never committed to any repository.
+Add these to `.claude/settings.local.json` inside this project directory. This file
+is already gitignored, so credentials stay scoped to this project and never leak
+into `~/.claude/settings.json` where they would be visible to every other Claude
+Code project on your machine.
 
 ```json
 {
   "env": {
     "JIRA_EMAIL": "you@redhat.com",
     "JIRA_API_TOKEN": "your-api-token",
-    "ERRATA_HOST": "your-errata-host",
-    "BREW_HOST": "your-brew-host",
-    "PROGRADE_SENDER": "your-prograde-sender",
-    "PROGRADE_LABEL": "your-prograde-label"
+    "ERRATA_HOST": "your-errata-host.example.com"
   }
 }
 ```
 
-> **`JIRA_EMAIL`** — your Atlassian account email address.
->
-> **`JIRA_API_TOKEN`** — API token for `redhat.atlassian.net`. Tokens with
-> insufficient scopes silently return 0 results rather than an error, so use one
-> with full read permissions.
->
-> **`ERRATA_HOST`** — required for `query-errata-advisory` (and therefore the full
-> pipeline). Set this to your organization's internal Errata Tool hostname. Red Hat
-> employees: you know what this is; if not, ask a teammate.
->
-> **`BREW_HOST`** — optional. Only needed if you construct Brew UI links manually
-> from `query-errata-advisory` output (see the `build_id` field). Set to your
-> organization's internal Brew instance hostname.
->
-> **`PROGRADE_SENDER`** — optional. The sender address for your organization's
-> Prograde security notification emails. Used with `query-gmail --from "$PROGRADE_SENDER"`
-> to filter Gmail results by sender. Red Hat employees: ask a teammate if you don't
-> know the address.
->
-> **`PROGRADE_LABEL`** — optional. Gmail label applied to Prograde notification
-> emails. Used with `query-gmail --label "$PROGRADE_LABEL"` to filter by label.
-> If unset, the `--label` flag is omitted and query-gmail returns all matching emails
-> regardless of label.
-
-#### Product configuration (optional — have Discovery defaults)
-
-If you are **not** the Discovery team and want to adapt this pipeline to your own
-product, set these additional variables. All have working Discovery defaults so the
-pipeline runs unchanged if you skip them.
-
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `JIRA_PROJECT` | `DISCOVERY` | JIRA project key to search for CVE tracking issues |
-| `JIRA_NVR_PATTERN` | Discovery regex | Full regex (with one capture group) matching NVR strings in JIRA issue summaries |
-| `CATALOG_SERVER_NAME` | `discovery-server` | Short name for the server container in Red Hat Catalog queries |
-| `CATALOG_UI_NAME` | `discovery-ui` | Short name for the UI container in Red Hat Catalog queries |
-| `CATALOG_SERVER_ID` | Discovery hex ID | Red Hat Catalog repository ID for the server container (from the catalog page URL) |
-| `CATALOG_UI_ID` | Discovery hex ID | Red Hat Catalog repository ID for the UI container |
-| `DOWNSTREAM_SERVER_IMAGE` | `registry.redhat.io/discovery/discovery-server-rhel9` | Full base URL for the downstream server image |
-| `DOWNSTREAM_UI_IMAGE` | `registry.redhat.io/discovery/discovery-ui-rhel9` | Full base URL for the downstream UI image |
-| `UPSTREAM_SERVER_IMAGE` | `quay.io/quipucords/quipucords` | Full base URL for the upstream server image |
-| `UPSTREAM_UI_IMAGE` | `quay.io/quipucords/quipucords-ui` | Full base URL for the upstream UI image |
-| `PRODUCT_NAME` | `Discovery` | Human-readable downstream product name (used in reports) |
-| `UPSTREAM_PRODUCT_NAME` | `quipucords` | Human-readable upstream project name (used in reports) |
-
-> **Note on the two-container model:** The pipeline is built around exactly two
-> containers (server + UI). Teams with a different number of containers would need
-> to adapt the skill structure — this is a known limitation for v1.
+| `JIRA_EMAIL` | *(required)* | Your Atlassian account email address. |
+| `JIRA_API_TOKEN` | *(required)* | API token for `redhat.atlassian.net`. Tokens with insufficient scopes silently return 0 results — use one with full read permissions. |
+| `ERRATA_HOST` | *(required)* | Hostname of your Errata Tool instance — **no `https://` prefix**, no trailing slash (e.g. `errata.example.com`). Ask a teammate if unsure. |
+| `PROGRADE_LABEL` | `alerts/prograde` | Gmail label used to filter Prograde advisory emails. Override if your organization uses a different label. |
+| `GMAIL_CREDENTIALS_PATH` | `~/.config/gmail/credentials.json` | Path to your Gmail OAuth credentials file. Override if you store it elsewhere. |
+| `GMAIL_TOKEN_PATH` | `~/.config/gmail/token.json` | Path where the OAuth token cache is written. Override to keep it in a non-default location. |
+| `JIRA_HOST` | `redhat.atlassian.net` | JIRA instance hostname. Override if your organization uses a different Atlassian tenant. |
+| `PROGRADE_SENDER` | — | Sender address of Prograde advisory emails. Not used by the pipeline; useful for ad-hoc Gmail queries (e.g. `query-gmail.py --from "$PROGRADE_SENDER"`). Ask a teammate for the address. |
 
 #### Source repo configuration (optional — used by `/verify-cves-in-source`)
 
@@ -184,24 +156,18 @@ paths, the skill clones them automatically using the URL variables.
 > `../quipucords-ui`), no SSH key is needed — the skill will fetch and check out the
 > requested commitish in place.
 
-Alternatively, set them in `.claude/settings.local.json` (project-local, gitignored)
-if you prefer to keep them scoped to this project.
-
 ### 2. Add permission allowlist (eliminates approval prompts)
 
 In the happy path — running skills from the project root directory — Claude Code
-should not prompt for approval on any command. Add this `permissions` block to
-your `~/.claude/settings.json` or `.claude/settings.local.json`:
+should not prompt for approval on any command. Add a `permissions` block to
+`.claude/settings.local.json` (the same file as your env vars from step 1):
 
 ```json
 {
   "env": {
     "JIRA_EMAIL": "you@redhat.com",
     "JIRA_API_TOKEN": "your-api-token",
-    "ERRATA_HOST": "your-errata-host",
-    "BREW_HOST": "your-brew-host",
-    "PROGRADE_SENDER": "your-prograde-sender",
-    "PROGRADE_LABEL": "your-prograde-label"
+    "ERRATA_HOST": "your-errata-host.example.com"
   },
   "permissions": {
     "allow": [
@@ -235,6 +201,14 @@ Catalog, Prograde emails, JIRA, and Errata), verifying which CVEs are fixed or
 still present in the container builds, and writing a visual HTML report to
 `cve-data/cve-report.html`. Open it with `open cve-data/cve-report.html` on
 macOS or `xdg-open cve-data/cve-report.html` on Linux.
+
+If you want to skip the interactive questions and accept all defaults (Prograde
+since last release, compare downstream vs. upstream, all `latest` tags, source
+check against `main`), append `default`:
+
+```
+/run-cve-check-pipeline default
+```
 
 ---
 
@@ -336,6 +310,34 @@ The HTML report is filterable and sortable, supports light and dark mode, and
 prominently calls out CVEs by priority: upstream regressions first, then unfixed
 CVEs, then upstream fixes that are pending a downstream release. CVEs resolved via
 source lockfile check are annotated with **[src]** in the upstream status column.
+
+---
+
+## Adapting for other products
+
+The pipeline ships with defaults for the Discovery product. If you are adapting it
+for a different product, set these additional environment variables in
+`.claude/settings.local.json`. Discovery team members can ignore this section
+entirely.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `JIRA_PROJECT` | `DISCOVERY` | JIRA project key to search for CVE tracking issues |
+| `JIRA_NVR_PATTERN` | Discovery regex | Full regex (with one capture group) matching NVR strings in JIRA issue summaries |
+| `CATALOG_SERVER_NAME` | `discovery-server` | Short name for the server container in Red Hat Catalog queries |
+| `CATALOG_UI_NAME` | `discovery-ui` | Short name for the UI container in Red Hat Catalog queries |
+| `CATALOG_SERVER_ID` | Discovery hex ID | Red Hat Catalog repository ID for the server container (from the catalog page URL) |
+| `CATALOG_UI_ID` | Discovery hex ID | Red Hat Catalog repository ID for the UI container |
+| `DOWNSTREAM_SERVER_IMAGE` | `registry.redhat.io/discovery/discovery-server-rhel9` | Full base URL for the downstream server image |
+| `DOWNSTREAM_UI_IMAGE` | `registry.redhat.io/discovery/discovery-ui-rhel9` | Full base URL for the downstream UI image |
+| `UPSTREAM_SERVER_IMAGE` | `quay.io/quipucords/quipucords` | Full base URL for the upstream server image |
+| `UPSTREAM_UI_IMAGE` | `quay.io/quipucords/quipucords-ui` | Full base URL for the upstream UI image |
+| `PRODUCT_NAME` | `Discovery` | Human-readable downstream product name (used in reports) |
+| `UPSTREAM_PRODUCT_NAME` | `quipucords` | Human-readable upstream project name (used in reports) |
+
+> **Note on the two-container model:** The pipeline is built around exactly two
+> containers (server + UI). Teams with a different number of containers would need
+> to adapt the skill structure — this is a known limitation for v1.
 
 ---
 
