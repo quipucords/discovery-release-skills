@@ -301,6 +301,97 @@ def test_extract_fixed_packages_module_stream_deduplicates_across_arches():
 def test_extract_fixed_packages_empty_releases():
     assert extract_fixed_packages({"releases": {}}) == []
 
+# ── extract_fixed_packages: regular build subpackage expansion ─────────────────
+# Root cause of CVE-2026-54369 / CVE-2026-54370: the 'acl' SRPM produces both
+# 'acl' (CLI tools) and 'libacl' (shared library) binary packages.  The container
+# has 'libacl' installed but not 'acl'.  Previously only the SRPM name was stored
+# in fixed_packages, so the RPM check found nothing and returned "unknown".
+
+def _build_with_subpkgs(srpm_name, version, release, rpms_by_arch):
+    return {
+        **_regular_build(f"{srpm_name}-{version}-{release}", srpm_name, version, release),
+        "rpms_by_arch": rpms_by_arch,
+    }
+
+
+def test_extract_fixed_packages_regular_build_with_binary_subpackage():
+    entry = _regular_errata(
+        "RHEL-9.8.0.Z.MAIN+EUS",
+        _build_with_subpkgs("acl", "2.4.0", "1.el9_8", {
+            "aarch64": [
+                "acl-2.4.0-1.el9_8.aarch64.rpm",
+                "libacl-2.4.0-1.el9_8.aarch64.rpm",
+            ],
+            "SRPMS": ["acl-2.4.0-1.el9_8.src.rpm"],
+        }),
+    )
+    pkgs = extract_fixed_packages(entry)
+    names = {p["name"] for p in pkgs}
+    assert "acl" in names
+    assert "libacl" in names
+
+
+def test_extract_fixed_packages_regular_build_excludes_debug_subpackages():
+    entry = _regular_errata(
+        "RHEL-9.8.0.Z.MAIN+EUS",
+        _build_with_subpkgs("acl", "2.4.0", "1.el9_8", {
+            "aarch64": [
+                "acl-2.4.0-1.el9_8.aarch64.rpm",
+                "acl-debuginfo-2.4.0-1.el9_8.aarch64.rpm",
+                "acl-debugsource-2.4.0-1.el9_8.aarch64.rpm",
+                "libacl-2.4.0-1.el9_8.aarch64.rpm",
+                "libacl-debuginfo-2.4.0-1.el9_8.aarch64.rpm",
+            ],
+        }),
+    )
+    pkgs = extract_fixed_packages(entry)
+    names = {p["name"] for p in pkgs}
+    assert "acl-debuginfo" not in names
+    assert "acl-debugsource" not in names
+    assert "libacl-debuginfo" not in names
+    assert "libacl" in names
+
+
+def test_extract_fixed_packages_regular_build_deduplicates_subpkgs_across_arches():
+    entry = _regular_errata(
+        "RHEL-9.8.0.Z.MAIN+EUS",
+        _build_with_subpkgs("acl", "2.4.0", "1.el9_8", {
+            "aarch64": ["libacl-2.4.0-1.el9_8.aarch64.rpm"],
+            "x86_64":  ["libacl-2.4.0-1.el9_8.x86_64.rpm"],
+            "i686":    ["libacl-2.4.0-1.el9_8.i686.rpm"],
+        }),
+    )
+    pkgs = extract_fixed_packages(entry)
+    libacl_entries = [p for p in pkgs if p["name"] == "libacl"]
+    assert len(libacl_entries) == 1
+
+
+def test_extract_fixed_packages_regular_build_no_rpms_by_arch_unchanged():
+    # Existing behavior: regular build without rpms_by_arch yields exactly one entry.
+    entry = _regular_errata(
+        "RHEL-9.4.0.GA",
+        _regular_build("openssh-9.9p1-7.el9_8", "openssh", "9.9p1", "7.el9_8"),
+    )
+    pkgs = extract_fixed_packages(entry)
+    assert len(pkgs) == 1
+    assert pkgs[0]["name"] == "openssh"
+
+
+def test_extract_fixed_packages_regular_build_subpkg_nvr_and_version():
+    entry = _regular_errata(
+        "RHEL-9.8.0.Z.MAIN+EUS",
+        _build_with_subpkgs("acl", "2.4.0", "1.el9_8", {
+            "x86_64": ["libacl-2.4.0-1.el9_8.x86_64.rpm"],
+        }),
+    )
+    pkgs = extract_fixed_packages(entry)
+    libacl = next(p for p in pkgs if p["name"] == "libacl")
+    assert libacl["nvr"] == "libacl-2.4.0-1.el9_8"
+    assert libacl["version"] == "2.4.0"
+    assert libacl["release"] == "1.el9_8"
+    assert libacl["release_name"] == "RHEL-9.8.0.Z.MAIN+EUS"
+
+
 def test_extract_fixed_packages_multiple_releases():
     entry = {
         "releases": {
