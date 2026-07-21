@@ -1,6 +1,10 @@
 """Tests for merge-cve-data.py pure functions."""
 import importlib.util
+import io
+import json as _json
 import pathlib
+import urllib.error
+from unittest.mock import patch
 
 
 def _load():
@@ -14,6 +18,8 @@ def _load():
 
 _mod = _load()
 best_severity = _mod.best_severity
+_fetch_packages_from_osv = _mod._fetch_packages_from_osv
+enrich_package_names_from_osv = _mod.enrich_package_names_from_osv
 normalize_container = _mod.normalize_container
 add_container = _mod.add_container
 get_or_create_cve = _mod.get_or_create_cve
@@ -719,3 +725,173 @@ def test_build_summary_severity_sorted_high_to_low():
     s = build_summary(registry)
     keys = list(s["by_severity"].keys())
     assert keys.index("Critical") < keys.index("Low")
+
+
+# ── _fetch_packages_from_osv ──────────────────────────────────────────────────
+# Root cause of CVE-2026-11332 gap: JIRA-only CVEs with no errata had no package
+# name to look up. OSV knows which PyPI/npm package a CVE affects, so we query it
+# during merge and write a note that verify-cves-in-source can then consume.
+
+def _fake_urlopen_ok(data: dict):
+    """Return a context-manager mock whose read() yields JSON-encoded data."""
+    class _Resp:
+        def read(self): return _json.dumps(data).encode()
+        def __enter__(self): return self
+        def __exit__(self, *_): pass
+    return _Resp()
+
+def _fake_urlopen_404(body: dict):
+    """Raise an HTTPError whose body is JSON-encoded body."""
+    body_bytes = _json.dumps(body).encode()
+    return urllib.error.HTTPError("http://x", 404, "Not Found", {}, io.BytesIO(body_bytes))
+
+
+def test_fetch_packages_from_osv_returns_pypi_package():
+    osv_data = {"affected": [{"package": {"ecosystem": "PyPI", "name": "ansible-core"}}]}
+    with patch("urllib.request.urlopen", return_value=_fake_urlopen_ok(osv_data)):
+        result = _fetch_packages_from_osv("CVE-2026-11332")
+    assert result == [("PyPI", "ansible-core")]
+
+
+def test_fetch_packages_from_osv_returns_npm_package():
+    osv_data = {"affected": [{"package": {"ecosystem": "npm", "name": "lodash"}}]}
+    with patch("urllib.request.urlopen", return_value=_fake_urlopen_ok(osv_data)):
+        result = _fetch_packages_from_osv("CVE-2026-99999")
+    assert result == [("npm", "lodash")]
+
+
+def test_fetch_packages_from_osv_excludes_non_pip_npm_ecosystems():
+    osv_data = {"affected": [
+        {"package": {"ecosystem": "Maven", "name": "org.springframework:spring-core"}},
+        {"package": {"ecosystem": "Go", "name": "github.com/foo/bar"}},
+        {"package": {"ecosystem": "PyPI", "name": "ansible-core"}},
+    ]}
+    with patch("urllib.request.urlopen", return_value=_fake_urlopen_ok(osv_data)):
+        result = _fetch_packages_from_osv("CVE-2026-11332")
+    assert result == [("PyPI", "ansible-core")]
+
+
+def test_fetch_packages_from_osv_deduplicates_same_package_across_entries():
+    osv_data = {"affected": [
+        {"package": {"ecosystem": "PyPI", "name": "ansible-core"}},
+        {"package": {"ecosystem": "PyPI", "name": "ansible-core"}},
+    ]}
+    with patch("urllib.request.urlopen", return_value=_fake_urlopen_ok(osv_data)):
+        result = _fetch_packages_from_osv("CVE-2026-11332")
+    assert result.count(("PyPI", "ansible-core")) == 1
+
+
+def test_fetch_packages_from_osv_follows_alias_redirect():
+    alias_body = {"code": 5, "message": "Vulnerability not found, but the following aliases were: GHSA-w8p5-mx5w-cpqj"}
+    osv_data = {"affected": [{"package": {"ecosystem": "PyPI", "name": "ansible-core"}}]}
+
+    call_count = [0]
+    def _urlopen(req, timeout=None):
+        call_count[0] += 1
+        if call_count[0] == 1:
+            raise _fake_urlopen_404(alias_body)
+        return _fake_urlopen_ok(osv_data)
+
+    with patch("urllib.request.urlopen", side_effect=_urlopen):
+        result = _fetch_packages_from_osv("CVE-2026-11332")
+    assert result == [("PyPI", "ansible-core")]
+    assert call_count[0] == 2
+
+
+def test_fetch_packages_from_osv_returns_empty_on_404_with_no_alias():
+    alias_body = {"code": 5, "message": "Vulnerability not found"}
+    with patch("urllib.request.urlopen", side_effect=_fake_urlopen_404(alias_body)):
+        result = _fetch_packages_from_osv("CVE-9999-99999")
+    assert result == []
+
+
+def test_fetch_packages_from_osv_returns_empty_on_connection_error():
+    with patch("urllib.request.urlopen", side_effect=OSError("network unreachable")):
+        result = _fetch_packages_from_osv("CVE-2026-11332")
+    assert result == []
+
+
+def test_fetch_packages_from_osv_returns_empty_when_no_affected():
+    osv_data = {}
+    with patch("urllib.request.urlopen", return_value=_fake_urlopen_ok(osv_data)):
+        result = _fetch_packages_from_osv("CVE-2026-11332")
+    assert result == []
+
+
+# ── enrich_package_names_from_osv ─────────────────────────────────────────────
+
+def _jira_only_registry(cve_id="CVE-2026-11332"):
+    """A registry with a JIRA-only CVE: no fixed_packages, no notes."""
+    return {
+        cve_id: {
+            "cve_id": cve_id,
+            "severity": "Important",
+            "advisory_id": None,
+            "affected_containers": ["discovery/discovery-server-rhel9"],
+            "vulnerable_packages": [],
+            "fixed_packages": [],
+            "fix_available": False,
+            "jira_issues": [{"key": "DISCOVERY-1435"}],
+            "sources": ["jira"],
+            "notes": [],
+        }
+    }
+
+
+def test_enrich_package_names_adds_osv_note_for_jira_only_cve():
+    osv_data = {"affected": [{"package": {"ecosystem": "PyPI", "name": "ansible-core"}}]}
+    registry = _jira_only_registry()
+    with patch("urllib.request.urlopen", return_value=_fake_urlopen_ok(osv_data)):
+        enrich_package_names_from_osv(registry)
+    notes = registry["CVE-2026-11332"]["notes"]
+    assert any("ansible-core" in n for n in notes)
+    assert any("OSV" in n for n in notes)
+
+
+def test_enrich_package_names_note_matches_check_source_regex():
+    # The note must match _JIRA_PKG_RE in check-source-packages.py so that
+    # verify-cves-in-source picks it up without further changes.
+    import re
+    pkg_re = re.compile(r"Package name from (?:JIRA|OSV):\s+'([^']+)'")
+    osv_data = {"affected": [{"package": {"ecosystem": "PyPI", "name": "ansible-core"}}]}
+    registry = _jira_only_registry()
+    with patch("urllib.request.urlopen", return_value=_fake_urlopen_ok(osv_data)):
+        enrich_package_names_from_osv(registry)
+    notes = registry["CVE-2026-11332"]["notes"]
+    matched = [pkg_re.search(n) for n in notes if pkg_re.search(n)]
+    assert matched, "No note matched the package-name regex that check-source-packages.py reads"
+    assert matched[0].group(1) == "ansible-core"
+
+
+def test_enrich_package_names_skips_cves_with_fixed_packages():
+    # CVEs that already have errata fix data should not be looked up in OSV.
+    registry = {
+        "CVE-2026-54369": {
+            "cve_id": "CVE-2026-54369",
+            "fixed_packages": [{"nvr": "acl-2.4.0-1.el9_8", "name": "acl"}],
+            "fix_available": True,
+            "notes": [],
+        }
+    }
+    with patch("urllib.request.urlopen") as mock_urlopen:
+        enrich_package_names_from_osv(registry)
+    mock_urlopen.assert_not_called()
+
+
+def test_enrich_package_names_skips_cves_already_having_package_note():
+    # If a JIRA note already named a package, skip the OSV lookup.
+    registry = _jira_only_registry()
+    registry["CVE-2026-11332"]["notes"] = [
+        "Package name from JIRA: 'ansible-core' (upstream name; may differ from RPM name)"
+    ]
+    with patch("urllib.request.urlopen") as mock_urlopen:
+        enrich_package_names_from_osv(registry)
+    mock_urlopen.assert_not_called()
+
+
+def test_enrich_package_names_no_call_when_osv_returns_no_packages():
+    osv_data = {"affected": [{"package": {"ecosystem": "Go", "name": "example.com/foo"}}]}
+    registry = _jira_only_registry()
+    with patch("urllib.request.urlopen", return_value=_fake_urlopen_ok(osv_data)):
+        enrich_package_names_from_osv(registry)
+    assert registry["CVE-2026-11332"]["notes"] == []
