@@ -34,7 +34,7 @@ def get_errata_host() -> str:
     if not host:
         print(
             "ERROR: ERRATA_HOST environment variable is not set.\n"
-            "Set it in ~/.claude/settings.json or .claude/settings.local.json:\n"
+            "Set it in .claude/settings.local.json (or ~/.claude/settings.json):\n"
             '  "env": { "ERRATA_HOST": "<your-errata-host>" }',
             file=sys.stderr,
         )

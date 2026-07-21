@@ -25,13 +25,13 @@ if result.returncode != 0:
 if not os.environ.get("JIRA_EMAIL"):
     errors.append(
         "JIRA_EMAIL is not set.\n"
-        "  Fix: add it to the env block in ~/.claude/settings.json (see project README)"
+        "  Fix: add it to the env block in .claude/settings.local.json (see project README)"
     )
 
 if not os.environ.get("JIRA_API_TOKEN"):
     errors.append(
         "JIRA_API_TOKEN is not set.\n"
-        "  Fix: add it to the env block in ~/.claude/settings.json (see project README)"
+        "  Fix: add it to the env block in .claude/settings.local.json (see project README)"
     )
 
 if errors:
