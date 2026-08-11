@@ -722,6 +722,19 @@ def check_cve_in_source(
     if matched_name and matched_name != pkg_name:
         result["package_name"] = matched_name  # report the name that actually matched
 
+    # If the JIRA fix version is from a different major version stream than the
+    # installed package, it can't be compared directly — reset to None so the
+    # advisory lookup below finds the stream-specific fix for the installed series
+    # (e.g. JIRA records 5.0.8 as the brace-expansion fix, but an installed 1.1.18
+    # should be checked against the 1.x fix of 1.1.17 instead).
+    if fixed_ver is not None and installed_version is not None:
+        try:
+            if _parse_version(installed_version)[0][0] != _parse_version(fixed_ver)[0][0]:
+                fixed_ver = None
+                result["minimum_fixed_version"] = None
+        except (IndexError, TypeError):
+            pass
+
     # Now re-run advisory lookup with the real installed version for accurate range matching.
     if fixed_ver is None:
         lookup_name = osv_canonical or pkg_name

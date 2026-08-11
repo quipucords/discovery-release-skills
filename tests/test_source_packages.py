@@ -862,6 +862,39 @@ def test_check_source_osv_fallback_pip(monkeypatch):
     assert result["is_fixed"] is False
 
 
+def test_check_source_jira_fix_version_wrong_major_stream(monkeypatch):
+    # CVE-2026-14257 (brace-expansion): JIRA only recorded the highest-stream fix (5.0.8),
+    # but quipucords-ui has 1.1.18 which satisfies the 1.x stream fix of 1.1.17.
+    # The check must fall back to advisory lookup with the actual installed version
+    # and find the stream-specific fix, then report is_fixed=True.
+    adv = _make_advisory(
+        "CVE-2026-14257", "GHSA-fake-brace-exp", "npm", "brace-expansion",
+        [
+            (">= 0, < 1.1.17", "1.1.17"),
+            (">= 2.0.0, < 2.1.3", "2.1.3"),
+            (">= 3.0.0, < 3.0.3", "3.0.3"),
+            (">= 5.0.0, < 5.0.8", "5.0.8"),
+        ],
+    )
+    monkeypatch.setitem(_advisory_cache, "CVE-2026-14257", [adv])
+    monkeypatch.setitem(_osv_cache, "GHSA-fake-brace-exp", {"id": "GHSA-fake-brace-exp"})
+
+    cve = {
+        "cve_id": "CVE-2026-14257",
+        "notes": [
+            "Package name from JIRA: 'brace-expansion' (upstream name; may differ from RPM name)",
+            "Upstream fixed version from JIRA: 5.0.8 (semver, not an RPM NVR)",
+        ],
+        "affected_containers": [],
+    }
+    result = check_cve_in_source(cve, "ui", {"brace-expansion": "1.1.18"},
+                                  "package-lock.json", "npm")
+    assert result["package_found"] is True
+    assert result["installed_version"] == "1.1.18"
+    assert result["minimum_fixed_version"] == "1.1.17"
+    assert result["is_fixed"] is True
+
+
 def test_source_aware_delta_does_not_affect_non_source_entries():
     # container_delta and source_aware_delta should agree on RPM-only entries
     ds = {"is_fixed": None, "searched_names": [], "package_found": False}
